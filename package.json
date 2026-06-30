@@ -1,0 +1,44 @@
+{
+  "name": "csvbox-mcp-server",
+  "version": "1.0.0",
+  "description": "Universal MCP server for CSVBox — create, update, patch, generate, validate and scaffold CSVBox importer sheets from any MCP-compatible client.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "csvbox-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "node --loader ts-node/esm src/index.ts",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "csvbox",
+    "csv",
+    "importer",
+    "claude",
+    "cursor"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "openai": "^4.104.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}
