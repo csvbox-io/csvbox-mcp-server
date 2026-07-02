@@ -10,6 +10,7 @@ import { registerGenerateSheetJson } from "./tools/generate-sheet-json.js";
 import { registerCreateImporterFromPrompt } from "./tools/create-importer-from-prompt.js";
 import { registerGenerateImportCode } from "./tools/generate-import-code.js";
 import { registerValidateSchema } from "./tools/validate-schema.js";
+import { registerSubmitFile } from "./tools/submit-file.js";
 import { registerCsvboxSheetPrompt } from "./prompts/csvbox-sheet-prompt.js";
 
 async function main(): Promise<void> {
@@ -18,7 +19,7 @@ async function main(): Promise<void> {
     version: "1.0.0",
   });
 
-  // Register all 7 tools. No GET/LIST/read tools — CSVBox exposes none.
+  // Register all 8 tools. No GET/LIST/read tools — CSVBox exposes none.
   registerCreateSheet(server);
   registerUpdateSheet(server);
   registerPatchSheet(server);
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
   registerCreateImporterFromPrompt(server);
   registerGenerateImportCode(server);
   registerValidateSchema(server);
+  registerSubmitFile(server);
 
   // MCP prompt — lets host LLMs build sheet JSON with no server-side LLM key.
   registerCsvboxSheetPrompt(server);

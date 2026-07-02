@@ -114,3 +114,40 @@ export function patchSheet(
     client.patch(`/1.1/sheet/${encodeURIComponent(sheetLicenseKey)}`, changes)
   );
 }
+
+/** Discriminated payload for the two `submit_file` submission methods. */
+export type SubmitFilePayload =
+  | { kind: "url"; import: Record<string, unknown> }
+  | {
+      kind: "upload";
+      import: Record<string, unknown>;
+      fileName: string;
+      fileContent: Buffer;
+    };
+
+/**
+ * POST /1.1/file — submit a file for import, either by public URL (JSON) or
+ * direct upload (multipart/form-data). For uploads, `Content-Type` is set to
+ * `undefined` so axios's native FormData handling supplies its own
+ * multipart boundary instead of the client's default `application/json`.
+ */
+export function submitFile(payload: SubmitFilePayload): Promise<ApiResult> {
+  if (payload.kind === "url") {
+    return request((client) =>
+      client.post("/1.1/file", { import: payload.import })
+    );
+  }
+
+  return request((client) => {
+    const form = new FormData();
+    form.append("import", JSON.stringify(payload.import));
+    form.append(
+      "file",
+      new Blob([payload.fileContent]),
+      payload.fileName
+    );
+    return client.post("/1.1/file", form, {
+      headers: { "Content-Type": undefined },
+    });
+  });
+}
