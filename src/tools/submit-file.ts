@@ -26,7 +26,7 @@ const inputShape = {
     .string()
     .optional()
     .describe(
-      "Base64-encoded file content for direct upload. Mutually exclusive with public_file_url. Requires file_name. Prefer public_file_url for large files."
+      "Base64-encoded file content for direct upload. This is an MCP-transport-only encoding: the server decodes it into raw bytes and sends CSVBox a true multipart/form-data 'file' part, never a base64 string. Mutually exclusive with public_file_url. Requires file_name. Prefer public_file_url for large files."
     ),
   file_name: z
     .string()
@@ -67,7 +67,7 @@ export function registerSubmitFile(server: McpServer): void {
     {
       title: "Submit File via CSVBox REST File API",
       description:
-        "Submit a file for import via POST /1.1/file. Provide exactly one of public_file_url (JSON submission) or file_base64 + file_name (multipart direct upload). Input: { sheet_license_key, public_file_url? | (file_base64?, file_name?), file_sheet_name?, user?, options?, dynamic_columns? }. Returns the API response.",
+        "Submit a file for import via POST /1.1/file. Provide exactly one of public_file_url (JSON submission) or file_base64 + file_name (multipart direct upload — file_base64 is decoded server-side and sent to CSVBox as true binary multipart content, never as a base64 string). Input: { sheet_license_key, public_file_url? | (file_base64?, file_name?), file_sheet_name?, user?, options?, dynamic_columns? }. Returns the API response.",
       inputSchema: inputShape,
     },
     async ({

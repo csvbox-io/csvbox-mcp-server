@@ -147,6 +147,8 @@ export function submitFile(payload: SubmitFilePayload): Promise<ApiResult> {
       payload.fileName
     );
     return client.post("/1.1/file", form, {
+      // Clears the client's default "application/json" header — otherwise it
+      // overrides the multipart boundary axios's FormData handling would set.
       headers: { "Content-Type": undefined },
     });
   });
