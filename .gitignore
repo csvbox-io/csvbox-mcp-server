@@ -1,7 +1,51 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+coverage/
+.nyc_output/
+
+# Environment files
 .env
+.env.*
+!.env.example
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude / AI
 .claude/
+
+# OpenSpec
 openspec/
+
+# Temporary files
+tmp/
+temp/
+
+# TypeScript
+*.tsbuildinfo
+
+# npm
+.npm/
+
+# Optional local configs
+*.local
+
+# macOS
+.AppleDouble
+.LSOverride
