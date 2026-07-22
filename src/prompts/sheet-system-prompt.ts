@@ -36,6 +36,20 @@ are configuration and belong in their sections, never in sheet_columns:
 - step settings (e.g. "skip select header step")
 - security settings
 
+## Destination object
+Each entry in "destinations" has "type" and "isActive" at the TOP LEVEL. For a
+"webhook" destination, the URL and ALL delivery options go INSIDE a "settings"
+object — never at the destination top level and never as columns:
+{ "type": "webhook", "isActive": true, "settings": {
+    "method": "POST", "url": "https://example.com/api/import",
+    "post_data_format": "JSON", "rows_per_chunk": 100, "request_type": "parallel",
+    "server_side_validation": true, "allow_resubmit": "all_rows",
+    "custom_headers": [ { "key": "Content-Type", "value": "application/json" } ] } }
+- "url", "method", "post_data_format", "rows_per_chunk", "request_type",
+  "server_side_validation", "allow_resubmit", and "custom_headers" MUST live under
+  "settings" — putting "url" at the destination top level is WRONG.
+- Non-webhook destinations (e.g. "testapi") stay flat: { "type": "testapi", "isActive": true }.
+
 ## Column object
 { "column_name": snake_case, "display_label": Title Case, "type": <one of the supported types>,
   "required"?: boolean, "position"?: number, "validators"?: { ... } }
@@ -70,6 +84,15 @@ Expected JSON:
 {"title":"Samsung Smartphones Stock Latest Data","sheet_columns":[{"column_name":"device_id","display_label":"Device Id","type":"text"},{"column_name":"model_number","display_label":"Model Number","type":"text"},{"column_name":"device_name","display_label":"Device Name","type":"text"},{"column_name":"price","display_label":"Price","type":"currency"},{"column_name":"discount_price","display_label":"Discount Price","type":"currency"},{"column_name":"manufacturing_date","display_label":"Manufacturing Date","type":"date","validators":{"format":"YYYY-MM-DD"}},{"column_name":"number_of_units","display_label":"Number Of Units","type":"number"}],"destinations":[{"type":"testapi","isActive":true}],"webhooks":[{"import_complete":{"url":"https://webhook.site/...","custom_headers":[{"key":"samsung-mobile-api-key","value":"xxx"}]}}],"security_settings":{"region":"eu","domains":["samsung.com","samsungmobile.com","app.samsungstore.com"]},"steps":{"file_upload":{"types":[".xlsx"],"split":true,"extract_types":["pdf"],"page_limit":100},"select_header":{"skip":true}}}
 
 Notice: webhook URL, header value, domains, region, and file/step options are NOT columns.
+
+## Worked example — webhook destination
+User: Create sheet Orders Import with columns order id and amount, destination as
+webhook posting to https://example.com/api/import as JSON with header Content-Type: application/json.
+
+Expected JSON:
+{"title":"Orders Import","sheet_columns":[{"column_name":"order_id","display_label":"Order Id","type":"text"},{"column_name":"amount","display_label":"Amount","type":"currency"}],"destinations":[{"type":"webhook","isActive":true,"settings":{"method":"POST","url":"https://example.com/api/import","post_data_format":"JSON","custom_headers":[{"key":"Content-Type","value":"application/json"}]}}]}
+
+Notice: the webhook URL and headers live INSIDE the destination's "settings" object, not at the top level, and NEVER as columns.
 
 Return only JSON.`;
 
