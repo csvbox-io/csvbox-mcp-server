@@ -19,11 +19,21 @@ export interface CompleteArgs {
   model?: string;
 }
 
+/**
+ * Result of a completion. `truncated` is true when the provider stopped
+ * because it hit the output token cap (Anthropic stop_reason "max_tokens",
+ * OpenAI finish_reason "length") — the JSON is almost certainly incomplete.
+ */
+export interface CompleteResult {
+  text: string;
+  truncated: boolean;
+}
+
 export interface LlmClient {
   readonly provider: LlmProvider;
   readonly model: string;
-  /** Run a single JSON-returning completion. Returns the raw text. */
-  complete(args: CompleteArgs): Promise<string>;
+  /** Run a single JSON-returning completion. */
+  complete(args: CompleteArgs): Promise<CompleteResult>;
 }
 
 const DEFAULT_MODELS: Record<LlmProvider, string> = {
@@ -31,8 +41,12 @@ const DEFAULT_MODELS: Record<LlmProvider, string> = {
   openai: "gpt-4o-mini",
 };
 
-/** Cap output size; a full CSVBox sheet is comfortably under this. */
-const MAX_TOKENS = 8192;
+/**
+ * Cap output size. Raised from 8192 to fit large category-expansion sheets
+ * (100+ columns with types/validators). If the model still hits this cap the
+ * response is flagged `truncated` so callers never parse a cut-off body.
+ */
+const MAX_TOKENS = 16384;
 
 /**
  * Decide which provider to use from the environment.
@@ -66,7 +80,7 @@ class AnthropicClient implements LlmClient {
   readonly provider = "anthropic" as const;
   constructor(private readonly apiKey: string, readonly model: string) {}
 
-  async complete({ system, user, model }: CompleteArgs): Promise<string> {
+  async complete({ system, user, model }: CompleteArgs): Promise<CompleteResult> {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey: this.apiKey });
     const response = await client.messages.create({
@@ -75,9 +89,10 @@ class AnthropicClient implements LlmClient {
       system,
       messages: [{ role: "user", content: user }],
     });
-    return response.content
+    const text = response.content
       .map((block) => (block.type === "text" ? block.text : ""))
       .join("");
+    return { text, truncated: response.stop_reason === "max_tokens" };
   }
 }
 
@@ -85,7 +100,7 @@ class OpenAiClient implements LlmClient {
   readonly provider = "openai" as const;
   constructor(private readonly apiKey: string, readonly model: string) {}
 
-  async complete({ system, user, model }: CompleteArgs): Promise<string> {
+  async complete({ system, user, model }: CompleteArgs): Promise<CompleteResult> {
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey: this.apiKey });
     const response = await client.chat.completions.create({
@@ -96,7 +111,11 @@ class OpenAiClient implements LlmClient {
         { role: "user", content: user },
       ],
     });
-    return response.choices[0]?.message?.content ?? "";
+    const choice = response.choices[0];
+    return {
+      text: choice?.message?.content ?? "",
+      truncated: choice?.finish_reason === "length",
+    };
   }
 }
 

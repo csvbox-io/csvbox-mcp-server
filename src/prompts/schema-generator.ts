@@ -26,6 +26,13 @@ export interface ParseErrorResult {
   raw: string;
 }
 
+export interface TruncatedResult {
+  ok: false;
+  reason: "TRUNCATED";
+  message: string;
+  raw: string;
+}
+
 export interface SheetResult {
   ok: true;
   sheet: Sheet;
@@ -33,7 +40,17 @@ export interface SheetResult {
   validation: ValidationResult;
 }
 
-export type GenerateResult = SheetResult | NoProviderResult | ParseErrorResult;
+export type GenerateResult =
+  | SheetResult
+  | NoProviderResult
+  | ParseErrorResult
+  | TruncatedResult;
+
+const TRUNCATED_MESSAGE =
+  "The model's response was cut off by the output token limit before it finished. " +
+  "The generated sheet is incomplete, so the CSVBox API was not called. Reduce the " +
+  "requested column count, split the request into fewer modules, or set a model with a " +
+  "larger output budget via LLM_MODEL and retry.";
 
 const NO_PROVIDER_MESSAGE =
   "No LLM provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY to use server-side generation, " +
@@ -70,9 +87,10 @@ export function parseJsonLenient(raw: string): unknown {
  */
 export async function generateSheetSmart(
   prompt: string,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  llmOverride?: LlmClient
 ): Promise<GenerateResult> {
-  const llm: LlmClient | null = resolveLlm(env);
+  const llm: LlmClient | null = llmOverride ?? resolveLlm(env);
   if (!llm) {
     return { ok: false, reason: "NO_LLM_PROVIDER", message: NO_PROVIDER_MESSAGE };
   }
@@ -80,7 +98,14 @@ export async function generateSheetSmart(
   const source = `llm:${llm.provider}:${llm.model}`;
 
   // First attempt.
-  let raw = await llm.complete({ system: SHEET_SYSTEM_PROMPT, user: prompt });
+  let result = await llm.complete({ system: SHEET_SYSTEM_PROMPT, user: prompt });
+  let raw = result.text;
+
+  // Truncated output is incomplete JSON; report it distinctly, never parse it.
+  if (result.truncated) {
+    return { ok: false, reason: "TRUNCATED", message: TRUNCATED_MESSAGE, raw };
+  }
+
   let sheet: Sheet;
   try {
     sheet = parseJsonLenient(raw) as Sheet;
@@ -97,10 +122,14 @@ export async function generateSheetSmart(
 
   // One repair attempt feeding back the validation errors.
   if (!validation.valid) {
-    raw = await llm.complete({
+    result = await llm.complete({
       system: SHEET_SYSTEM_PROMPT,
       user: prompt + repairNote(validation),
     });
+    raw = result.text;
+    if (result.truncated) {
+      return { ok: false, reason: "TRUNCATED", message: TRUNCATED_MESSAGE, raw };
+    }
     try {
       sheet = parseJsonLenient(raw) as Sheet;
       validation = validateSheet(sheet);

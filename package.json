@@ -1,6 +1,6 @@
 {
   "name": "csvbox-mcp-server-beta",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "Universal MCP server for CSVBox — create, update, patch, generate, validate and scaffold CSVBox importer sheets from any MCP-compatible client.",
   "type": "module",
   "main": "dist/index.js",
@@ -16,6 +16,7 @@
     "dev": "node --loader ts-node/esm src/index.ts",
     "prepare": "npm run build",
     "test": "node dist/index.js --help",
+    "test:unit": "tsc -p tsconfig.test.json && node --test dist/tests/*.test.js",
     "lint": "tsc --noEmit"
   },
   "keywords": [

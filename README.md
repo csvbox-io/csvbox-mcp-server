@@ -32,6 +32,32 @@ It also exposes one **MCP prompt**:
 2. **MCP prompt** (`create_csvbox_sheet`) — when you have no server key, host clients (Cursor, Claude Desktop, Cline) run the generation with their own model, then call `validate_schema` and `create_sheet`. Free.
 3. **None configured** — `generate_sheet_json` returns a structured "no LLM provider configured" error pointing to the MCP prompt, and `create_importer_from_prompt` does not call the CSVBox API. There is **no** regex fallback.
 
+#### Category / module expansion
+
+The generator runs in one of two modes, chosen automatically from the prompt:
+
+- **Extraction** (default) — the prompt names concrete fields (e.g. *"columns name, email, phone"*). Only those become columns; nothing is invented.
+- **Expansion** — the prompt names business **modules / categories** as a list (e.g. *"modules for: Company Information, Suppliers, Payroll, Invoice"*), asks for a *comprehensive*/*detailed* schema, or asks for a column count (*"at least 100 columns"*). Each named module is expanded into several realistic, prefixed, correctly-typed columns (e.g. Suppliers → `supplier_id`, `supplier_name`, `supplier_gstin`, `supplier_email`, …). An explicit minimum count is honored and every `column_name` is globally unique.
+
+Data types and validations are inferred from the field names and any requested types:
+
+| Requested / implied | Column `type` | Validators |
+| --- | --- | --- |
+| Dropdown / status / category with fixed options | `list` | `values: [...]` candidate options |
+| Percentage / percent | `number` | `min_value: 0`, `max_value: 100` |
+| Positive numeric (quantity, count, stock, cost, age) | `number` | `min_value: 0` |
+| ID / code / reference number | `text` | — |
+| Email | `email` | — |
+| Phone / mobile | `phone_number` | — |
+| URL / website | `url` | — |
+| Price / cost / amount / salary | `currency` | — |
+| Date fields | `date` | `format: "YYYY-MM-DD"` |
+| Boolean / is_* / active | `boolean` | — |
+| GST / GSTIN / tax id | `regex` | GSTIN pattern |
+| PIN code / postal code (India) | `regex` | `^[1-9][0-9]{5}$` |
+
+> **Large schemas:** the default models (`claude-haiku-4-5`, `gpt-4o-mini`) are cheap but produce noticeably better 100+ column schemas when you override with a stronger model via `LLM_MODEL` (e.g. `claude-sonnet-4-6`). The output cap is raised to fit big sheets; if a request is still too large the response is flagged **`TRUNCATED`** (a distinct result, not a parse error) and the CSVBox API is **not** called — reduce the column count / modules or use a model with a larger output budget and retry.
+
 ## Installation
 
 ```bash
@@ -75,7 +101,7 @@ The provider is auto-detected:
 | `OPENAI_API_KEY` set (no `LLM_PROVIDER`) | OpenAI | `gpt-4o-mini` |
 | neither key set | none — tools return an error pointing to the `create_csvbox_sheet` MCP prompt | — |
 
-`LLM_PROVIDER` disambiguates when both keys are present; `LLM_MODEL` overrides the model for whichever provider is chosen.
+`LLM_PROVIDER` disambiguates when both keys are present; `LLM_MODEL` overrides the model for whichever provider is chosen. For large category/module schemas (100+ columns) set `LLM_MODEL` to a stronger model (e.g. `claude-sonnet-4-6`) — see [Category / module expansion](#category--module-expansion).
 
 > **MCP Inspector:** set the LLM key in the Inspector's environment-variables panel to use the server-LLM path. Inspector has no host LLM of its own, so it can *render* the `create_csvbox_sheet` prompt but cannot *execute* it — for the keyless path use a client with a model (Cursor, Claude Desktop, Cline).
 
