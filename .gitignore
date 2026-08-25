@@ -50,13 +50,7 @@ temp/
 .AppleDouble
 .LSOverride
 
-# Testing — whole directories ignored (not just *.test.ts / *.spec.ts) so any
-# new file added under either tree is covered automatically.
-e2e/
-src/tests/
-
 # Testing — standalone config
-playwright.config.ts
 tsconfig.test.json
 
 # Testing — generated artifacts, recreated by every test run
@@ -69,3 +63,9 @@ playwright.real.config.ts
 e2e-real/
 test-results-real/
 playwright-report-real/
+
+# Secrets / credentials
+*.pem
+*.key
+credentials.json
+secrets.json

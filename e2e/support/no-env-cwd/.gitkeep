@@ -1,0 +1,7 @@
+This directory is intentionally empty and has no .env file. It's used as the
+working directory for a second, zero-credential Inspector instance in
+playwright.config.ts, so dotenv/config in src/index.ts finds nothing to
+fall back to and the server genuinely has no LLM provider and no CSVBox
+credentials configured — the only reliable way to exercise the
+NO_LLM_PROVIDER and missing-CSVBox-credential error paths without a real
+.env leaking a real key into those tests.

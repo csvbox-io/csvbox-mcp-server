@@ -398,6 +398,23 @@ scripted fake; the one test that needs real request encoding starts an ephemeral
 listener on `127.0.0.1` and closes it afterwards. Tests that read environment
 variables set what they need explicitly and restore the previous values.
 
+#### E2E tests
+
+```bash
+npm run test:e2e         # run the Playwright suite
+npm run test:e2e:report  # open the HTML report from the last run
+```
+
+Specs live in `e2e/`, configured by `playwright.config.ts`. Like the unit suite,
+this suite is **hermetic**: it starts mock CSVBox and LLM servers on loopback
+(`e2e/support/mock-csvbox-server.ts`, `e2e/support/mock-llm-server.ts`) and
+drives the real built server (`dist/index.js`) through MCP Inspector with
+fake credentials pointed at those mocks — it never contacts a real CSVBox
+account or LLM provider, and never reads your `.env`. A separate,
+zero-credential Inspector instance covers the "missing credentials" error
+paths. Requires `npm run build` first (the `test:e2e` webServer entries build
+automatically).
+
 ### Embedding the server
 
 `createServer()` is exported from the entry module. It registers every tool and
