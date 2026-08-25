@@ -436,3 +436,40 @@ Content-Length: 6378
     "s3_upload": true
   }
 }
+--------------------------------------------------------------------------------
+PATCH merges: only the items named below are touched. Existing items this body
+does not name are left alone — nothing is deleted implicitly, and an empty array
+is a no-op. Items are matched by column_name / function_name / transform_name;
+an unmatched name creates a new item. `_delete: true` removes an item, and every
+other field on a _delete item is ignored, including js_code.
+
+`_delete` is valid ONLY on PATCH. On PUT, a collection you send is authoritative
+and any item it does not name is deleted.
+--------------------------------------------------------------------------------
+
+PATCH /1.1/sheet/{sheet_license_key} HTTP/1.1
+Host: api.csvbox.io/
+x-csvbox-api-key: YOUR_API_KEY
+x-csvbox-secret-api-key: YOUR_API_KEY
+Accept: application/json
+Content-Type: application/json
+
+{
+  "virtual_columns": [
+    {
+      "column_name": "full_name",
+      "js_code": "return (csvbox.row.first_name + ' ' + csvbox.row.last_name).trim();",
+      "active": true
+    },
+    {
+      "column_name": "email_domain",
+      "_delete": true
+    }
+  ],
+  "data_transforms": [
+    {
+      "transform_name": "trim_notes",
+      "_delete": true
+    }
+  ]
+}

@@ -25,6 +25,12 @@ Return ONLY valid JSON — no prose, no markdown, no code fences.
 - "security_settings": object — region, allowed domains, upload toggles.
 - "steps": object — file_upload / select_header / map_columns / verify_data / results.
 
+## Function collections — never emit these here
+"virtual_columns", "validation_functions" and "data_transforms" are authored
+separately (see the generate_sheet_functions tool). Do NOT emit them from this
+prompt, and NEVER emit any of them as an empty array: a full replace treats an
+empty array as "delete every item in that collection". Omit the key entirely.
+
 ## CRITICAL RULE: columns vs configuration
 ONLY create a column for an actual data field the user will import (e.g. "device id",
 "price", "manufacturing date"). NEVER turn configuration into a column. The following

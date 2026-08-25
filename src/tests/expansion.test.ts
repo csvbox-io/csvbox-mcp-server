@@ -15,20 +15,8 @@ import assert from "node:assert/strict";
 
 import { generateSheetSmart } from "../prompts/schema-generator.js";
 import { SHEET_SYSTEM_PROMPT } from "../prompts/sheet-system-prompt.js";
-import type { LlmClient, CompleteResult } from "../services/llm-client.js";
-
-/** Fake client that returns a scripted response and records that it ran. */
-function fakeLlm(response: CompleteResult): LlmClient & { calls: number } {
-  return {
-    provider: "anthropic",
-    model: "mock",
-    calls: 0,
-    async complete() {
-      this.calls++;
-      return response;
-    },
-  } as LlmClient & { calls: number };
-}
+import type { CompleteResult } from "../services/llm-client.js";
+import { fakeLlm } from "./support/fake-llm.js";
 
 // --- System prompt wiring -------------------------------------------------
 

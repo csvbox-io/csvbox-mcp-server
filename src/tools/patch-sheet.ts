@@ -18,7 +18,7 @@ export function registerPatchSheet(server: McpServer): void {
     {
       title: "Patch CSVBox Sheet",
       description:
-        "Partially update a CSVBox sheet via PATCH /1.1/sheet/{sheet_license_key}. Sends only the changes object. Input: { sheet_license_key, changes }. Returns the API response.",
+        "Partially update a CSVBox sheet via PATCH /1.1/sheet/{sheet_license_key}. Sends only the changes object. Input: { sheet_license_key, changes }. Returns the API response. PATCH MERGES: only the items you list are touched and nothing is deleted implicitly, so an empty array is a no-op. Items in virtual_columns, validation_functions and data_transforms are matched by column_name / function_name / transform_name respectively — an unmatched name creates a new item. To remove one, send it with `_delete: true`; every other field on a _delete item is ignored, including js_code. This is the safe verb for applying generated functions. Run validate_schema with mode 'patch' first.",
       inputSchema: inputShape,
     },
     async ({ sheet_license_key, changes }) => {

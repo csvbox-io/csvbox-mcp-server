@@ -1,0 +1,127 @@
+NOTE: The "integrity" values below are PLACEHOLDERS, not real digests. Replace
+them with the actual Subresource Integrity hash published for the exact script
+version you pin, or drop the "dependencies" array and use plain JavaScript.
+
+POST /1.1/sheet HTTP/1.1
+Host: api.csvbox.io/
+x-csvbox-api-key: YOUR_API_KEY
+x-csvbox-secret-api-key: YOUR_API_KEY
+Accept: application/json
+Content-Type: application/json
+
+{
+  "title": "Customers With Functions",
+  "sheet_columns": [
+    {
+      "column_name": "first_name",
+      "display_label": "First Name",
+      "type": "text",
+      "required": true,
+      "position": 1
+    },
+    {
+      "column_name": "last_name",
+      "display_label": "Last Name",
+      "type": "text",
+      "required": true,
+      "position": 2
+    },
+    {
+      "column_name": "email",
+      "display_label": "Email",
+      "type": "email",
+      "required": true,
+      "position": 3
+    },
+    {
+      "column_name": "signup_date",
+      "display_label": "Signup Date",
+      "type": "date",
+      "validators": {
+        "format": "YYYY-MM-DD"
+      },
+      "position": 4
+    },
+    {
+      "column_name": "notes",
+      "display_label": "Notes",
+      "type": "text",
+      "position": 5
+    }
+  ],
+  "virtual_columns": [
+    {
+      "column_name": "full_name",
+      "js_code": "return (csvbox.row.first_name + ' ' + csvbox.row.last_name).trim();",
+      "active": true
+    },
+    {
+      "column_name": "email_domain",
+      "js_code": "var parts = String(csvbox.row.email).split('@');\nreturn parts.length > 1 ? parts[1].toLowerCase() : '';",
+      "active": true
+    },
+    {
+      "column_name": "imported_from",
+      "js_code": "return csvbox.import.sheet_name + ' row ' + csvbox.import.row_number;",
+      "active": true
+    }
+  ],
+  "validation_functions": [
+    {
+      "function_name": "check_email",
+      "scope": "column",
+      "columns": ["email"],
+      "dynamic_columns": [],
+      "js_code": "return csvbox.column.email.every(function (v) { return String(v).indexOf('@') > -1; }) ? [] : ['Every email must contain an @'];",
+      "active": true,
+      "dependencies": []
+    },
+    {
+      "function_name": "check_signup_date",
+      "scope": "column",
+      "columns": ["signup_date"],
+      "js_code": "return csvbox.column.signup_date.every(function (v) { return dayjs(v).isValid(); }) ? [] : ['Signup date must be a valid date'];",
+      "active": true,
+      "dependencies": [
+        {
+          "url": "https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js",
+          "globals": ["dayjs"],
+          "integrity": "sha384-PLACEHOLDERreplaceWithTheRealDigestBeforeUse"
+        }
+      ]
+    },
+    {
+      "function_name": "check_name_pair",
+      "scope": "row",
+      "columns": ["first_name", "last_name"],
+      "js_code": "if (!csvbox.row.first_name && !csvbox.row.last_name) { return ['A row needs at least a first or last name']; }\nreturn [];",
+      "active": true
+    }
+  ],
+  "data_transforms": [
+    {
+      "transform_name": "trim_notes",
+      "scope": "column",
+      "run_at": "before_validation",
+      "columns": ["notes"],
+      "js_code": "csvbox.column.notes = csvbox.column.notes.map(function (v) { return String(v).trim(); });\nreturn csvbox;",
+      "active": true,
+      "dependencies": []
+    },
+    {
+      "transform_name": "lowercase_email",
+      "scope": "column",
+      "run_at": "before_validation",
+      "columns": ["email"],
+      "js_code": "csvbox.column.email = csvbox.column.email.map(function (v) { return String(v).trim().toLowerCase(); });\nreturn csvbox;",
+      "active": true
+    },
+    {
+      "transform_name": "stamp_source",
+      "scope": "row",
+      "run_at": "after_validation",
+      "js_code": "csvbox.row.notes = (csvbox.row.notes || '') + ' [via ' + csvbox.import.destination_type + ']';\nreturn csvbox;",
+      "active": true
+    }
+  ]
+}

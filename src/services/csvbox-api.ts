@@ -8,7 +8,7 @@ import axios, { AxiosInstance, isAxiosError } from "axios";
  * `docs/`; the task brief's `x-csvbox-api-secret` is the only documented
  * alternative. If CSVBox confirms otherwise, change the constant below.
  */
-const BASE_URL = "https://api.csvbox.io";
+const DEFAULT_BASE_URL = "https://api.csvbox.io";
 const API_KEY_HEADER = "x-csvbox-api-key";
 const API_SECRET_HEADER = "x-csvbox-secret-api-key";
 
@@ -43,7 +43,7 @@ function getCredentials(): { key: string; secret: string } {
 function buildClient(): AxiosInstance {
   const { key, secret } = getCredentials();
   return axios.create({
-    baseURL: BASE_URL,
+    baseURL: process.env.CSVBOX_API_BASE_URL || DEFAULT_BASE_URL,
     timeout: 30_000,
     headers: {
       Accept: "application/json",
