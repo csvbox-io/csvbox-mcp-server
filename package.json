@@ -48,7 +48,8 @@
     "@modelcontextprotocol/inspector": "2.3.0",
     "@playwright/test": "^1.62.1",
     "@types/node": "^22.10.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
-    "ts-node": "^10.9.2"
+    "xlsx": "^0.18.5"
   }
 }

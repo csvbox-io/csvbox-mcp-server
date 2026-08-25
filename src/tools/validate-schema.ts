@@ -26,8 +26,9 @@ export interface ValidationResult {
 
 /**
  * Which write verb the payload is headed for. The verb changes what is legal:
- * PUT is authoritative per collection (an empty array deletes everything),
- * PATCH merges (an empty array is a no-op, and `_delete` is only valid here).
+ * PUT is authoritative per collection (an empty array deletes everything,
+ * and `_delete` on an item is redundant but only a warning), PATCH merges
+ * (an empty array is a no-op, and `_delete` is fully valid here).
  * Defaults to "create" so existing single-argument callers are unaffected.
  */
 export type ValidationMode = "create" | "put" | "patch";
@@ -339,12 +340,20 @@ function validateCollection(
       idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
     }
 
-    // `_delete` is only meaningful on a partial update.
-    const isDelete = it._delete === true;
-    if (it._delete !== undefined && ctx.mode !== "patch") {
-      ctx.errors.push(
-        `${named}: _delete is only valid on a partial update (PATCH), not on ${ctx.mode === "put" ? "a full replace" : "create"}.`
-      );
+    // `_delete` is only meaningful on a partial update. On a full replace
+    // (PUT) the backend already drops any item omitted from the array, so
+    // the flag is a harmless no-op there — warn instead of erroring.
+    const isDelete = ctx.mode === "patch" && it._delete === true;
+    if (it._delete !== undefined) {
+      if (ctx.mode === "put") {
+        ctx.warnings.push(
+          `${named}: _delete is redundant on a full replace (PUT) and will be ignored — omit the item from the array to delete it.`
+        );
+      } else if (ctx.mode !== "patch") {
+        ctx.errors.push(
+          `${named}: _delete is only valid on a partial update (PATCH) or full replace (PUT), not on create.`
+        );
+      }
     }
 
     // js_code — required unless the item is a delete instruction.
@@ -509,7 +518,7 @@ const inputShape = {
     .enum(["create", "put", "patch"])
     .optional()
     .describe(
-      'Which write verb this payload is headed for. "create" (default) for POST, "put" for a full replace, "patch" for a partial update. Affects only the function collections: an empty array is an error under "put" (it deletes every item), and `_delete` is allowed only under "patch".'
+      'Which write verb this payload is headed for. "create" (default) for POST, "put" for a full replace, "patch" for a partial update. Affects only the function collections: an empty array is an error under "put" (it deletes every item); `_delete` is fully valid under "patch", redundant (warning only) under "put", and an error under "create".'
     ),
 };
 
