@@ -1,5 +1,5 @@
 {
-  "name": "@csvbox-io/mcp-server",
+  "name": "@csvbox/mcp-server",
   "version": "1.0.0",
   "description": "Universal MCP server for CSVBox — create, update, patch, generate, validate and scaffold CSVBox importer sheets from any MCP-compatible client.",
   "type": "module",
