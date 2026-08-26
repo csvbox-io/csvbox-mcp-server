@@ -125,6 +125,12 @@ See `docs/sheet-functions-example.json` for a full payload.
 ## Installation
 
 ```bash
+npx @csvbox-io/mcp-server
+```
+
+Or build from source:
+
+```bash
 git clone <this-repo> csvbox-mcp-server
 cd csvbox-mcp-server
 npm install
@@ -422,7 +428,7 @@ prompt and returns the `McpServer` **without** attaching a transport, so you can
 connect it to one of your own:
 
 ```ts
-import { createServer } from "csvbox-mcp-server";
+import { createServer } from "@csvbox-io/mcp-server";
 
 const server = createServer();
 await server.connect(myTransport);
