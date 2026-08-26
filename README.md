@@ -125,7 +125,7 @@ See `docs/sheet-functions-example.json` for a full payload.
 ## Installation
 
 ```bash
-npx @csvbox/mcp-server
+npm install @csvbox/mcp-server
 ```
 
 Or build from source:
@@ -189,19 +189,24 @@ The server speaks MCP over stdio and logs `csvbox-mcp-server running on stdio` t
 
 ## Client configuration
 
-In every client below, set `CSVBOX_API_KEY` / `CSVBOX_API_SECRET` in the `env` block and point the command at the built `dist/index.js` (use an absolute path).
+For a published installation, use the npm package with `npx`. Set `CSVBOX_API_KEY` / `CSVBOX_API_SECRET` in the `env` block.
+
+> **Note:** The npm package is `@csvbox/mcp-server` and the executable is `csvbox-mcp-server`.
 
 ### Claude Desktop
 
-Edit `claude_desktop_config.json`
-(macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
+Add the following to your Claude Desktop MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "csvbox": {
-      "command": "node",
-      "args": ["/absolute/path/to/csvbox-mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@csvbox/mcp-server",
+        "csvbox-mcp-server"
+      ],
       "env": {
         "CSVBOX_API_KEY": "your_api_key",
         "CSVBOX_API_SECRET": "your_api_secret"
@@ -219,8 +224,12 @@ Edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per-project):
 {
   "mcpServers": {
     "csvbox": {
-      "command": "node",
-      "args": ["/absolute/path/to/csvbox-mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@csvbox/mcp-server",
+        "csvbox-mcp-server"
+      ],
       "env": {
         "CSVBOX_API_KEY": "your_api_key",
         "CSVBOX_API_SECRET": "your_api_secret"
@@ -238,8 +247,12 @@ Edit `~/.codeium/windsurf/mcp_config.json`:
 {
   "mcpServers": {
     "csvbox": {
-      "command": "node",
-      "args": ["/absolute/path/to/csvbox-mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@csvbox/mcp-server",
+        "csvbox-mcp-server"
+      ],
       "env": {
         "CSVBOX_API_KEY": "your_api_key",
         "CSVBOX_API_SECRET": "your_api_secret"
@@ -257,8 +270,12 @@ In the Roo Code MCP settings (`mcp_settings.json`):
 {
   "mcpServers": {
     "csvbox": {
-      "command": "node",
-      "args": ["/absolute/path/to/csvbox-mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@csvbox/mcp-server",
+        "csvbox-mcp-server"
+      ],
       "env": {
         "CSVBOX_API_KEY": "your_api_key",
         "CSVBOX_API_SECRET": "your_api_secret"
@@ -276,8 +293,12 @@ In the Cline MCP settings (`cline_mcp_settings.json`):
 {
   "mcpServers": {
     "csvbox": {
-      "command": "node",
-      "args": ["/absolute/path/to/csvbox-mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@csvbox/mcp-server",
+        "csvbox-mcp-server"
+      ],
       "env": {
         "CSVBOX_API_KEY": "your_api_key",
         "CSVBOX_API_SECRET": "your_api_secret"
@@ -295,8 +316,12 @@ Add to `.vscode/mcp.json` (or the global `mcp.json`):
 {
   "servers": {
     "csvbox": {
-      "command": "node",
-      "args": ["/absolute/path/to/csvbox-mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@csvbox/mcp-server",
+        "csvbox-mcp-server"
+      ],
       "env": {
         "CSVBOX_API_KEY": "your_api_key",
         "CSVBOX_API_SECRET": "your_api_secret"
