@@ -1,0 +1,50 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.csvbox-io/csvbox-mcp-server",
+  "description": "CSVBox MCP server for creating, updating, validating and generating CSVBox importer sheets.",
+  "repository": {
+    "url": "https://github.com/csvbox-io/csvbox-mcp-server",
+    "source": "github"
+  },
+  "version": "1.0.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@csvbox/mcp-server",
+      "version": "1.0.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "CSVBOX_API_KEY",
+          "description": "CSVBox API key",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "CSVBOX_API_SECRET",
+          "description": "CSVBox API secret",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "description": "OpenAI API key for AI-powered tools",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "description": "Anthropic API key for AI-powered tools",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

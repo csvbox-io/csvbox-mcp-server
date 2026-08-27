@@ -69,3 +69,6 @@ playwright-report-real/
 *.key
 credentials.json
 secrets.json
+
+# MCP publisher CLI binary
+mcp-publisher.exe
