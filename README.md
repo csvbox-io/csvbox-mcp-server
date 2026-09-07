@@ -152,6 +152,19 @@ CSVBox credentials are **only** required for the API-backed tools (`create_sheet
 
 > **Auth header note:** the client sends `x-csvbox-api-key` and `x-csvbox-secret-api-key` (matching the CSVBox reference payloads). These are defined as constants in `src/services/csvbox-api.ts` if your account uses different header names.
 
+### Client identification
+
+Every request this server sends to the CSVBox API carries two extra headers:
+
+```
+x-csvbox-client: mcp
+x-csvbox-client-version: <the version in package.json>
+```
+
+CSVBox records how each sheet was created; without these, sheets and imports made through MCP are indistinguishable from any other REST caller. The version is read from `package.json` and is the same one the server advertises to your MCP client, so the two can never disagree.
+
+These are **always sent** — there is no environment variable or tool input that disables or changes them. They carry no credentials and nothing derived from your tool inputs. Tools that make no API call (`generate_sheet_json`, `generate_sheet_functions`, `generate_import_code`, `validate_schema`) send no request and therefore no headers.
+
 ### LLM provider (for prompt → sheet generation)
 
 `generate_sheet_json` and `create_importer_from_prompt` need an LLM. Set **one** of:

@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
+import { VERSION } from "./version.js";
+
 import { registerCreateSheet } from "./tools/create-sheet.js";
 import { registerUpdateSheet } from "./tools/update-sheet.js";
 import { registerPatchSheet } from "./tools/patch-sheet.js";
@@ -27,7 +29,7 @@ import { registerCsvboxFunctionsPrompt } from "./prompts/csvbox-functions-prompt
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "csvbox-mcp-server",
-    version: "1.0.0",
+    version: VERSION,
   });
 
   // Register all 9 tools. No GET/LIST/read tools — CSVBox exposes none.

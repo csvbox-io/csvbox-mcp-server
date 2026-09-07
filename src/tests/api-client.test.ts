@@ -10,6 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import axios from "axios";
 
@@ -19,6 +20,7 @@ import {
   patchSheet,
   submitFile,
 } from "../services/csvbox-api.js";
+import { VERSION } from "../version.js";
 import {
   createHttpStub,
   redirectToLoopback,
@@ -308,7 +310,11 @@ test("installing and restoring the stub leaves axios as it was", () => {
 // --- 3.10 Multipart on the wire -------------------------------------------
 
 test("a direct upload sends real multipart with decoded bytes", async (t) => {
-  const received: { contentType?: string; body: Buffer }[] = [];
+  const received: {
+    contentType?: string;
+    headers: http.IncomingHttpHeaders;
+    body: Buffer;
+  }[] = [];
 
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
@@ -316,6 +322,7 @@ test("a direct upload sends real multipart with decoded bytes", async (t) => {
     req.on("end", () => {
       received.push({
         contentType: req.headers["content-type"],
+        headers: req.headers,
         body: Buffer.concat(chunks),
       });
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -350,13 +357,22 @@ test("a direct upload sends real multipart with decoded bytes", async (t) => {
   assert.equal(result.ok, true, `upload failed: ${JSON.stringify(result)}`);
 
   assert.equal(received.length, 1);
-  const { contentType, body } = received[0];
+  const { contentType, headers, body } = received[0];
 
   assert.match(
     String(contentType),
     /^multipart\/form-data; boundary=.+/,
     `expected multipart, got "${contentType}"`
   );
+
+  // The per-request `Content-Type: undefined` override must clear only that
+  // key. Axios merges per-request headers over instance defaults key by key,
+  // so identification survives — asserted on the real wire, because this is
+  // merge behavior we depend on but do not own. An axios upgrade that changed
+  // it would silently strip attribution from every upload without this.
+  assert.equal(headers["x-csvbox-client"], "mcp");
+  assert.equal(headers["x-csvbox-client-version"], VERSION);
+  assert.equal(headers["x-csvbox-api-key"], CREDS.CSVBOX_API_KEY);
 
   const text = body.toString("latin1");
   assert.match(text, /name="import"/);
@@ -377,4 +393,66 @@ test("a direct upload sends real multipart with decoded bytes", async (t) => {
     false,
     "file part carried base64 text instead of binary"
   );
+});
+
+// --- 3.11 Client identification -------------------------------------------
+
+test("every operation identifies itself as the MCP client", async (t) => {
+  const stub = stubFor(t);
+
+  await withCleanEnv(CREDS, async () => {
+    await createSheet({ title: "S" });
+    await updateSheet("lic", { title: "S" });
+    await patchSheet("lic", { title: "S" });
+    await submitFile({ kind: "url", import: { sheet_license_key: "lic" } });
+  });
+
+  assert.equal(stub.requests.length, 4);
+  for (const req of stub.requests) {
+    assert.equal(headerOf(req, "x-csvbox-client"), "mcp");
+    assert.equal(headerOf(req, "x-csvbox-client-version"), VERSION);
+  }
+});
+
+test("the identification version matches the package manifest", () => {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../../package.json", import.meta.url), "utf8")
+  ) as { version: string };
+
+  assert.equal(VERSION, manifest.version);
+});
+
+test("identification headers carry no credential material", async (t) => {
+  const stub = stubFor(t);
+
+  await withCleanEnv(CREDS, () => createSheet({ title: "S" }));
+
+  const client = String(headerOf(stub.last(), "x-csvbox-client"));
+  const version = String(headerOf(stub.last(), "x-csvbox-client-version"));
+
+  for (const value of [client, version]) {
+    assert.equal(value.includes(CREDS.CSVBOX_API_KEY), false);
+    assert.equal(value.includes(CREDS.CSVBOX_API_SECRET), false);
+  }
+});
+
+test("identification is unconditional — no environment variable disables it", async (t) => {
+  const stub = stubFor(t);
+
+  // Every variable the server reads, plus plausible opt-out spellings someone
+  // might expect to work. None of them may suppress attribution.
+  await withCleanEnv(
+    {
+      ...CREDS,
+      CSVBOX_API_BASE_URL: "http://127.0.0.1:9999",
+      LLM_PROVIDER: "anthropic",
+      CSVBOX_MCP_CLIENT_HEADER: "off",
+      CSVBOX_CLIENT: "",
+      NODE_ENV: "production",
+    },
+    () => createSheet({ title: "S" })
+  );
+
+  assert.equal(headerOf(stub.last(), "x-csvbox-client"), "mcp");
+  assert.equal(headerOf(stub.last(), "x-csvbox-client-version"), VERSION);
 });

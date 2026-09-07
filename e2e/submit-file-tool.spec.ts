@@ -2,6 +2,7 @@ import { test, expect } from './support/fixtures';
 import { connectAndOpenTools } from './support/connect';
 import { selectTool, fillField, executeTool, readResult } from './support/tool-page';
 import { queueCsvboxResponse, getCsvboxRequests } from './support/queue-mock';
+import { expectMcpIdentification } from './support/identification';
 
 test.describe('submit_file tool — local precondition checks', () => {
   test.beforeEach(async ({ page }) => {
@@ -62,6 +63,7 @@ test.describe('submit_file tool — mock-backed submission', () => {
     const requests = await getCsvboxRequests(page);
     expect(requests[0].headers['content-type']).toMatch(/^application\/json/);
     expect(requests[0].bodyText).toContain('https://example.com/a.csv');
+    expectMcpIdentification(requests[0]);
   });
 
   test('a file_base64 submission sends true multipart with decoded bytes, not a base64 string', async ({ page }) => {
@@ -83,6 +85,9 @@ test.describe('submit_file tool — mock-backed submission', () => {
     expect(requests[0].bodyText).toContain('filename="data.csv"');
     expect(requests[0].bodyText).toContain(content);
     expect(requests[0].bodyText).not.toContain(base64);
+    // The multipart path clears Content-Type per-request; identification must
+    // still survive that override on the real wire.
+    expectMcpIdentification(requests[0]);
   });
 
   test('malformed base64 does not crash the tool locally; it still reaches the mock', async ({ page }) => {

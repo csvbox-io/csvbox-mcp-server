@@ -2,6 +2,7 @@ import { test, expect } from './support/fixtures';
 import { connectAndOpenTools } from './support/connect';
 import { selectTool, fillField, executeTool, readResult } from './support/tool-page';
 import { queueCsvboxResponse, getCsvboxRequests } from './support/queue-mock';
+import { expectMcpIdentification } from './support/identification';
 import { NO_CREDS_URL } from '../playwright.config';
 
 test.describe('create_sheet tool', () => {
@@ -33,6 +34,18 @@ test.describe('create_sheet tool', () => {
     expect(result.isError).toBe(true);
     const json = result.json as { ok: boolean };
     expect(json.ok).toBe(false);
+  });
+
+  test('the request identifies itself to CSVBox as the MCP client', async ({ page }) => {
+    await queueCsvboxResponse(page, { status: 201, body: { sheet_license_key: 'lic-123' } });
+
+    await fillField(page, 'sheet', JSON.stringify({ title: 'Test Sheet' }));
+    await executeTool(page);
+    await readResult(page);
+
+    const requests = await getCsvboxRequests(page);
+    expect(requests.length).toBe(1);
+    expectMcpIdentification(requests[0]);
   });
 });
 

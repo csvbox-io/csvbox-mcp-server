@@ -1,5 +1,7 @@
 import axios, { AxiosInstance, isAxiosError } from "axios";
 
+import { VERSION } from "../version.js";
+
 /**
  * CSVBox REST API client.
  *
@@ -11,6 +13,20 @@ import axios, { AxiosInstance, isAxiosError } from "axios";
 const DEFAULT_BASE_URL = "https://api.csvbox.io";
 const API_KEY_HEADER = "x-csvbox-api-key";
 const API_SECRET_HEADER = "x-csvbox-secret-api-key";
+
+/**
+ * Client identification. CSVBox records how each sheet was created; without
+ * these headers MCP traffic is indistinguishable from any other REST caller.
+ * Attached to the shared instance rather than per call site, so every current
+ * and future API-backed tool is attributed without doing anything.
+ *
+ * Advisory only. Anyone holding the API key can send the same values, so this
+ * is adequate for adoption analytics and support triage but must never gate
+ * billing, quota, or entitlement decisions.
+ */
+const CLIENT_HEADER = "x-csvbox-client";
+const CLIENT_VERSION_HEADER = "x-csvbox-client-version";
+const CLIENT_ID = "mcp";
 
 /** Normalized result shapes returned to every API-backed tool. */
 export type ApiSuccess = { ok: true; status: number; data: unknown };
@@ -50,6 +66,8 @@ function buildClient(): AxiosInstance {
       "Content-Type": "application/json",
       [API_KEY_HEADER]: key,
       [API_SECRET_HEADER]: secret,
+      [CLIENT_HEADER]: CLIENT_ID,
+      [CLIENT_VERSION_HEADER]: VERSION,
     },
   });
 }
@@ -149,6 +167,8 @@ export function submitFile(payload: SubmitFilePayload): Promise<ApiResult> {
     return client.post("/1.1/file", form, {
       // Clears the client's default "application/json" header — otherwise it
       // overrides the multipart boundary axios's FormData handling would set.
+      // Axios merges per-request headers over instance defaults key by key, so
+      // only Content-Type is dropped; auth and client identification survive.
       headers: { "Content-Type": undefined },
     });
   });

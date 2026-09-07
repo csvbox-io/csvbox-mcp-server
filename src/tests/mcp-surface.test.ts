@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createServer } from "../index.js";
+import { VERSION } from "../version.js";
 import { connectHarness } from "./support/mcp-harness.js";
 import { createHttpStub } from "./support/http-stub.js";
 import { withCleanEnv } from "./support/env.js";
@@ -255,4 +256,17 @@ test("the functions prompt returns its system prompt, request and sheet", async 
   );
   assert.match(withoutSheetText, /Not supplied/);
   assert.match(withoutSheetText, /do not invent others/);
+});
+
+// --- 4.9 Version identity -------------------------------------------------
+
+test("the advertised server version is the one sent to CSVBox", async (t) => {
+  const h = await connectHarness();
+  t.after(() => h.close());
+
+  // One source, two consumers. A client's advertised version and the version
+  // CSVBox observes in x-csvbox-client-version must never disagree — otherwise
+  // a support ticket quoting one cannot be matched against the other.
+  assert.equal(h.client.getServerVersion()?.version, VERSION);
+  assert.equal(h.client.getServerVersion()?.name, "csvbox-mcp-server");
 });
