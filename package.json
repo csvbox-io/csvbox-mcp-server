@@ -1,8 +1,8 @@
 {
   "name": "@csvbox/mcp-server",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "mcpName": "io.github.csvbox-io/csvbox-mcp-server",
-  "description": "Universal MCP server for CSVBox — create, update, patch, generate, validate and scaffold CSVBox importer sheets from any MCP-compatible client.",
+  "description": "Universal MCP server for CSVBox — create, read, update, patch, generate, validate and scaffold importer sheets, and check import history, failure causes and usage, from any MCP-compatible client.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

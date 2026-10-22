@@ -332,3 +332,153 @@ test("a sheet triggering several column rules reports all of them", () => {
   assert.equal(matching(result.errors, "unsupported type").length, 1);
   assert.equal(matching(result.errors, "Duplicate column_name").length, 1);
 });
+
+// --- List value shapes ------------------------------------------------------
+
+function listSheet(type: string, values: unknown) {
+  return {
+    title: "T",
+    sheet_columns: [
+      { column_name: "c", display_label: "C", type, position: 1, validators: { values } },
+    ],
+  };
+}
+
+test("list values must be objects with a string value; display_label is optional", () => {
+  const strings = validateSheet(listSheet("list", ["a", "b"]));
+  assert.equal(strings.valid, false);
+  assert.match(strings.errors.join("|"), /validators\.values\[0\] must be an object/);
+  assert.match(strings.errors.join("|"), /silently drops/);
+
+  const noValue = validateSheet(listSheet("list", [{ display_label: "A" }]));
+  assert.equal(noValue.valid, false);
+  assert.match(noValue.errors.join("|"), /needs a string value/);
+
+  const valueOnly = validateSheet(listSheet("list", [{ value: "a" }, { value: "b", display_label: "B" }]));
+  assert.equal(valueOnly.valid, true, valueOnly.errors.join(" | "));
+
+  const badLabel = validateSheet(listSheet("list", [{ value: "a", display_label: 7 }]));
+  assert.equal(badLabel.valid, false);
+  assert.match(badLabel.errors.join("|"), /display_label that is not a string/);
+
+  const extra = validateSheet(listSheet("list", [{ value: "a", display_label: "A", color: "red" }]));
+  assert.equal(extra.valid, false);
+  assert.match(extra.errors.join("|"), /unsupported key\(s\): color/);
+
+  const ok = validateSheet(listSheet("list", [{ value: "a", display_label: "A" }]));
+  assert.equal(ok.valid, true, ok.errors.join(" | "));
+});
+
+test("a bad nested dependent is located and reported once", () => {
+  const result = validateSheet(
+    listSheet("list", [
+      { value: "in", dependents: [{ display_label: "Maharashtra" }] },
+      "stray",
+    ])
+  );
+  assert.equal(result.valid, false);
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0], /validators\.values\[0\]\.dependents\[0\] needs a string value/);
+});
+
+test("multiselect_list takes plain strings and rejects objects", () => {
+  assert.equal(validateSheet(listSheet("multiselect_list", ["Red", "Green"])).valid, true);
+
+  const objects = validateSheet(listSheet("multiselect_list", [{ value: "Red" }]));
+  assert.equal(objects.valid, false);
+  assert.match(objects.errors.join("|"), /plain strings/);
+
+  assert.equal(validateSheet(listSheet("multiselect_list", ["Red", " "])).valid, false);
+});
+
+test("non-array list values are reported, absent values are not", () => {
+  const bad = validateSheet(listSheet("list", "a,b"));
+  assert.equal(bad.valid, false);
+  assert.match(bad.errors.join("|"), /validators\.values must be an array/);
+
+  const none = validateSheet({
+    title: "T",
+    sheet_columns: [{ column_name: "c", display_label: "C", type: "list", position: 1 }],
+  });
+  assert.equal(none.valid, true, none.errors.join(" | "));
+});
+
+test("the generator prompt teaches the accepted list shape", async () => {
+  const { SHEET_SYSTEM_PROMPT } = await import("../prompts/sheet-system-prompt.js");
+  assert.match(SHEET_SYSTEM_PROMPT, /"values":\[\{"value":"draft"\}/);
+  assert.match(SHEET_SYSTEM_PROMPT, /display_label" is optional/);
+  assert.doesNotMatch(SHEET_SYSTEM_PROMPT, /"values":\["draft"/);
+});
+
+// --- PATCH: a column needs only its name -------------------------------------
+
+test("under patch a column may carry only its name and the field being changed", () => {
+  const onlyLabel = validateSheet({ sheet_columns: [{ column_name: "plan", display_label: "Plan B" }] }, "patch");
+  assert.equal(onlyLabel.valid, true, onlyLabel.errors.join(" | "));
+
+  const onlyValidators = validateSheet(
+    { sheet_columns: [{ column_name: "age", validators: { max_value: 9 } }] },
+    "patch"
+  );
+  assert.equal(onlyValidators.valid, true, onlyValidators.errors.join(" | "));
+  assert.deepEqual(onlyValidators.warnings, [], "no 'no positions set' advisory on a partial update");
+});
+
+test("the same partial column is still an error under create and put", () => {
+  for (const mode of ["create", "put"] as const) {
+    const result = validateSheet(
+      { title: "T", sheet_columns: [{ column_name: "plan", display_label: "Plan B" }] },
+      mode
+    );
+    assert.equal(result.valid, false, mode);
+    assert.match(result.errors.join("|"), /missing type/);
+  }
+});
+
+test("under patch a column still needs a name, and any field it does send is checked", () => {
+  assert.match(
+    validateSheet({ sheet_columns: [{ display_label: "x" }] }, "patch").errors.join("|"),
+    /missing column_name/
+  );
+  assert.match(
+    validateSheet({ sheet_columns: [{ column_name: "a", type: "bogus" }] }, "patch").errors.join("|"),
+    /unsupported type "bogus"/
+  );
+  assert.match(
+    validateSheet({ sheet_columns: [{ column_name: "a", display_label: "" }] }, "patch").errors.join("|"),
+    /display_label must be a non-empty string when present/
+  );
+  assert.match(
+    validateSheet({ sheet_columns: [{ column_name: "a", type: "" }] }, "patch").errors.join("|"),
+    /type must be a non-empty string when present/
+  );
+});
+
+test("list values are checked under patch only when the type is sent", () => {
+  const typed = validateSheet(
+    { sheet_columns: [{ column_name: "plan", type: "list", validators: { values: ["a", "b"] } }] },
+    "patch"
+  );
+  assert.equal(typed.valid, false);
+  assert.match(typed.errors.join("|"), /silently drops/);
+
+  const untyped = validateSheet(
+    { sheet_columns: [{ column_name: "plan", validators: { values: ["a", "b"] } }] },
+    "patch"
+  );
+  assert.equal(untyped.valid, true, "the stored type decides, and it is not known here");
+});
+
+test("a dependent list's parent outside the request is a warning under patch, an error otherwise", () => {
+  const col = { column_name: "city", type: "dependent_list", validators: { primary_column: "country" } };
+
+  const patch = validateSheet({ sheet_columns: [col] }, "patch");
+  assert.equal(patch.valid, true, patch.errors.join(" | "));
+  assert.match(patch.warnings.join("|"), /not in this request/);
+
+  const create = validateSheet(
+    { title: "T", sheet_columns: [{ ...col, display_label: "City", position: 1 }] },
+    "create"
+  );
+  assert.match(create.errors.join("|"), /non-existent column/);
+});

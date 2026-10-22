@@ -36,7 +36,12 @@ export function everyColumnTypeSheet(): Record<string, unknown> {
       display_label: "Parent List",
       type: "list",
       position: 1,
-      validators: { values: ["a", "b"] },
+      validators: {
+        values: [
+          { value: "a", display_label: "A" },
+          { value: "b" },
+        ],
+      },
     },
   ];
 

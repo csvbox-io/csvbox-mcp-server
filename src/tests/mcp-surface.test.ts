@@ -21,15 +21,28 @@ const TOOL_NAMES = [
   "create_importer_from_prompt",
   "create_sheet",
   "generate_import_code",
+  "generate_sample_csv",
   "generate_sheet_functions",
   "generate_sheet_json",
+  "generate_webhook_handler",
+  "get_import",
+  "get_import_errors",
+  "get_sheet",
+  "get_usage",
+  "list_imports",
+  "list_sheets",
   "patch_sheet",
   "submit_file",
   "update_sheet",
   "validate_schema",
 ];
 
-const PROMPT_NAMES = ["create_csvbox_sheet", "csvbox_sheet_functions"];
+const PROMPT_NAMES = [
+  "create_csvbox_sheet",
+  "csvbox_sheet_functions",
+  "debug_failed_import",
+  "migrate_from_flatfile",
+];
 
 /** Documented arguments per tool, and which of them are required. */
 const TOOL_ARGS: Record<string, { all: string[]; required: string[] }> = {
@@ -41,6 +54,26 @@ const TOOL_ARGS: Record<string, { all: string[]; required: string[] }> = {
   patch_sheet: {
     all: ["sheet_license_key", "changes"],
     required: ["sheet_license_key", "changes"],
+  },
+  get_sheet: { all: ["sheet_license_key"], required: ["sheet_license_key"] },
+  list_sheets: { all: ["q", "page", "per_page"], required: [] },
+  list_imports: {
+    all: ["sheet", "status", "from", "to", "page", "per_page"],
+    required: [],
+  },
+  get_import: { all: ["import_id"], required: ["import_id"] },
+  get_import_errors: {
+    all: ["import_id", "page", "per_page"],
+    required: ["import_id"],
+  },
+  get_usage: { all: [], required: [] },
+  generate_webhook_handler: {
+    all: ["framework", "kind", "verify_signature"],
+    required: ["framework"],
+  },
+  generate_sample_csv: {
+    all: ["sheet_license_key", "sheet", "valid_rows", "invalid_rows"],
+    required: [],
   },
   generate_sheet_json: { all: ["prompt"], required: ["prompt"] },
   create_importer_from_prompt: { all: ["prompt"], required: ["prompt"] },
@@ -64,7 +97,7 @@ const TOOL_ARGS: Record<string, { all: string[]; required: string[] }> = {
 
 // --- 4.1 / 4.2 Inventory --------------------------------------------------
 
-test("the server advertises exactly the nine documented tools", async (t) => {
+test("the server advertises exactly the seventeen documented tools", async (t) => {
   const h = await connectHarness();
   t.after(() => h.close());
 
@@ -73,7 +106,7 @@ test("the server advertises exactly the nine documented tools", async (t) => {
   assert.equal(new Set(names).size, names.length, "duplicate tool name");
 });
 
-test("the server advertises exactly the two documented prompts", async (t) => {
+test("the server advertises exactly the four documented prompts", async (t) => {
   const h = await connectHarness();
   t.after(() => h.close());
 

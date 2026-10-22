@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
  * A read failure degrades to a stale string rather than crashing startup: a
  * wrong version is far cheaper than a server that will not boot.
  */
-const FALLBACK_VERSION = "1.0.1";
+const FALLBACK_VERSION = "1.1.0";
 
 function readVersion(): string {
   try {

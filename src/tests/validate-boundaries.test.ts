@@ -264,9 +264,9 @@ test("a very long identifier is measured in UTF-16 code units, consistently", ()
 // --- 7.4 Deep nesting -----------------------------------------------------
 
 test("deeply nested list values parse without blowing the stack", () => {
-  let node: Record<string, unknown> = { value: "leaf" };
+  let node: Record<string, unknown> = { value: "leaf", display_label: "Leaf" };
   for (let i = 0; i < 50; i++) {
-    node = { value: `level_${i}`, dependents: [node] };
+    node = { value: `level_${i}`, display_label: `Level ${i}`, dependents: [node] };
   }
 
   const parsed = ListValueSchema.safeParse(node);

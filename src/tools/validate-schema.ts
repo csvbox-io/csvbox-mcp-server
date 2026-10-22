@@ -89,6 +89,72 @@ interface Ctx {
   warnedMissingColumns: boolean;
 }
 
+const LIST_NODE_KEYS = new Set(["value", "display_label", "dependents"]);
+
+/**
+ * The API keeps `validators.values` only in the shape it accepts and drops the
+ * rest with a 200, so a wrong shape never errors server-side: it just leaves
+ * the dropdown empty. These checks mirror that. A `list` column needs
+ * `{ value, display_label? }` objects (`value` required, `display_label` optional
+ * and stored empty when omitted; nested `dependents` follow the same rule, and one bad
+ * node discards the whole list), while a `multiselect_list` column
+ * takes plain non-empty strings and drops objects.
+ */
+function validateListValues(
+  ref: string,
+  type: string,
+  values: unknown,
+  errors: string[]
+): void {
+  if (values === undefined) return;
+  if (!Array.isArray(values)) {
+    errors.push(`${ref}: validators.values must be an array.`);
+    return;
+  }
+
+  if (type === "multiselect_list") {
+    const bad = values.findIndex((v) => typeof v !== "string" || v.trim() === "");
+    if (bad !== -1) {
+      errors.push(
+        `${ref}: validators.values[${bad}] must be a non-empty string. multiselect_list takes plain strings (e.g. ["Red","Green"]); the API drops objects.`
+      );
+    }
+    return;
+  }
+
+  // type === "list": walk iteratively so nesting depth cannot overflow the stack.
+  const stack: { node: unknown; path: string }[] = values
+    .map((node, i) => ({ node, path: `validators.values[${i}]` }))
+    .reverse();
+  while (stack.length > 0) {
+    const { node, path } = stack.pop()!;
+    let problem: string | null = null;
+    if (!node || typeof node !== "object" || Array.isArray(node)) {
+      problem = 'must be an object like { "value": "x" }';
+    } else {
+      const n = node as Record<string, unknown>;
+      const extra = Object.keys(n).filter((k) => !LIST_NODE_KEYS.has(k));
+      if (typeof n.value !== "string") problem = "needs a string value";
+      else if (n.display_label !== undefined && typeof n.display_label !== "string") {
+        problem = "has a display_label that is not a string";
+      } else if (extra.length > 0) problem = `has unsupported key(s): ${extra.join(", ")}`;
+      else if (n.dependents !== undefined && !Array.isArray(n.dependents)) {
+        problem = "dependents must be an array";
+      } else if (Array.isArray(n.dependents)) {
+        for (let i = n.dependents.length - 1; i >= 0; i--) {
+          stack.push({ node: n.dependents[i], path: `${path}.dependents[${i}]` });
+        }
+      }
+    }
+    if (problem) {
+      errors.push(
+        `${ref}: ${path} ${problem}. A list column needs every entry as an object with a string "value" (display_label is optional); the API silently drops the whole list otherwise.`
+      );
+      return; // one bad entry already discards the list; do not repeat per node
+    }
+  }
+}
+
 /**
  * Validate `sheet_columns`. Returns the set of column names for later
  * reference checks, or null when the list is absent or not an array.
@@ -97,8 +163,15 @@ interface Ctx {
 function validateColumns(
   s: Record<string, unknown>,
   errors: string[],
-  warnings: string[]
+  warnings: string[],
+  mode: ValidationMode = "create"
 ): Set<string> | null {
+  // A PATCH column names the column and carries only what changes; the server
+  // keeps every field not sent. So under patch only column_name is required,
+  // display_label and type are checked when present, and anything that depends
+  // on the type is checked only when the type is sent (otherwise the stored
+  // type decides, and it is not known here).
+  const partial = mode === "patch";
   const columns = s.sheet_columns;
 
   if (columns === undefined) return null;
@@ -144,14 +217,30 @@ function validateColumns(
       nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
     }
 
-    if (typeof display !== "string" || display.length === 0) {
-      errors.push(`${ref}: missing display_label.`);
+    if (partial && display === undefined) {
+      // not changing the label
+    } else if (typeof display !== "string" || display.length === 0) {
+      errors.push(`${ref}: ${partial ? "display_label must be a non-empty string when present" : "missing display_label"}.`);
     }
 
-    if (typeof type !== "string" || type.length === 0) {
-      errors.push(`${ref}: missing type.`);
+    if (partial && type === undefined) {
+      // not changing the type
+    } else if (typeof type !== "string" || type.length === 0) {
+      errors.push(`${ref}: ${partial ? "type must be a non-empty string when present" : "missing type"}.`);
     } else if (!SUPPORTED.has(type)) {
       errors.push(`${ref}: unsupported type "${type}".`);
+    }
+
+    if (type === "list" || type === "multiselect_list") {
+      const validators = c.validators;
+      validateListValues(
+        ref,
+        type,
+        validators && typeof validators === "object"
+          ? (validators as Record<string, unknown>).values
+          : undefined,
+        errors
+      );
     }
 
     // Position duplicates.
@@ -172,9 +261,15 @@ function validateColumns(
           `${ref}: dependent type "${type}" requires validators.primary_column.`
         );
       } else if (!knownNames.has(primary)) {
-        errors.push(
-          `${ref}: validators.primary_column "${primary}" references a non-existent column.`
-        );
+        if (partial) {
+          warnings.push(
+            `${ref}: validators.primary_column "${primary}" is not in this request; make sure that column exists on the sheet.`
+          );
+        } else {
+          errors.push(
+            `${ref}: validators.primary_column "${primary}" references a non-existent column.`
+          );
+        }
       }
     }
   });
@@ -189,8 +284,8 @@ function validateColumns(
     if (count > 1) errors.push(`Duplicate position ${pos} (${count} columns).`);
   }
 
-  // Advisory: no positions set at all.
-  if (positionCounts.size === 0) {
+  // Advisory: no positions set at all (not meaningful for a partial update).
+  if (!partial && positionCounts.size === 0) {
     warnings.push("No column positions set; CSVBox will order columns as given.");
   }
 
@@ -473,8 +568,9 @@ function validateCollection(
  * Hard problems -> `errors`; advisory issues -> `warnings`.
  *
  * `mode` describes the write verb the payload is headed for. It only affects
- * the function collections (empty arrays and `_delete`); column checks are
- * identical in every mode.
+ * the function collections (empty arrays and `_delete`) and how strictly columns
+ * are checked: under patch a column need only name itself, because the server
+ * keeps every field a PATCH does not send.
  */
 export function validateSheet(
   sheet: unknown,
@@ -502,7 +598,7 @@ export function validateSheet(
   }
 
   // sheet_columns is optional. Absent -> skip column checks. Empty -> warn.
-  const knownNames = validateColumns(s, errors, warnings);
+  const knownNames = validateColumns(s, errors, warnings, mode);
 
   const ctx: Ctx = { errors, warnings, mode, knownNames, warnedMissingColumns: false };
   COLLECTIONS.forEach((spec) => validateCollection(s, spec, ctx));
@@ -518,7 +614,7 @@ const inputShape = {
     .enum(["create", "put", "patch"])
     .optional()
     .describe(
-      'Which write verb this payload is headed for. "create" (default) for POST, "put" for a full replace, "patch" for a partial update. Affects only the function collections: an empty array is an error under "put" (it deletes every item); `_delete` is fully valid under "patch", redundant (warning only) under "put", and an error under "create".'
+      'Which write verb this payload is headed for. "create" (default) for POST, "put" for a full replace, "patch" for a partial update. It changes two things. Function collections: an empty array is an error under "put" (it deletes every item); `_delete` is fully valid under "patch", redundant (warning only) under "put", and an error under "create". Columns: under "patch" a column needs only `column_name`, because the server changes just the fields you send; `display_label` and `type` are checked only when present.'
     ),
 };
 
@@ -528,7 +624,7 @@ export function registerValidateSchema(server: McpServer): void {
     {
       title: "Validate CSVBox Schema",
       description:
-        "Validate a CSVBox sheet schema locally (no API call). Requires a non-empty title; sheet_columns is optional (absent passes, empty yields a warning). When columns are present, checks for missing column_name/display_label/type, unsupported types, duplicate names, duplicate positions, and invalid dependent column references. Also checks virtual_columns, validation_functions, and data_transforms: per-sheet caps, duplicate and colliding names, missing or oversized js_code, scope/run_at enums, column references against sheet_columns, and dependency URLs (https, allowed CDN hosts, .js/.mjs, integrity digest). Pass mode ('create' | 'put' | 'patch', default 'create') so empty-array and _delete rules match the verb you are about to use. Returns { valid, errors, warnings }.",
+        "Validate a CSVBox sheet schema locally (no API call). Requires a non-empty title; sheet_columns is optional (absent passes, empty yields a warning). When columns are present, checks for missing column_name/display_label/type, unsupported types, duplicate names, duplicate positions, invalid dependent column references, and list values in the wrong shape (a `list` column needs { value, display_label? } objects with `value` required, a `multiselect_list` column needs plain strings; the API silently drops anything else). Also checks virtual_columns, validation_functions, and data_transforms: per-sheet caps, duplicate and colliding names, missing or oversized js_code, scope/run_at enums, column references against sheet_columns, and dependency URLs (https, allowed CDN hosts, .js/.mjs, integrity digest). Pass mode ('create' | 'put' | 'patch', default 'create') so empty-array and _delete rules match the verb you are about to use. Returns { valid, errors, warnings }.",
       inputSchema: inputShape,
     },
     async ({ sheet, mode }) => {

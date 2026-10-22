@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.csvbox-io/csvbox-mcp-server",
-  "description": "CSVBox MCP server for creating, updating, validating and generating CSVBox importer sheets.",
+  "description": "CSVBox MCP server for creating, reading, updating, validating and generating importer sheets, and for checking import history, failure causes and usage.",
   "repository": {
     "url": "https://github.com/csvbox-io/csvbox-mcp-server",
     "source": "github"
   },
-  "version": "1.0.1",
+  "version": "1.1.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@csvbox/mcp-server",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "transport": {
         "type": "stdio"
       },

@@ -92,7 +92,28 @@ function validateFunctions(
   functions: FunctionsPayload,
   sheet?: Sheet | Record<string, unknown>
 ): ValidationResult {
-  return validateSheet({ ...(sheet ?? {}), ...functions }, "patch");
+  return validateSheet({ ...contextOnly(sheet), ...functions }, "patch");
+}
+
+/**
+ * The sheet is context here (column names for reference checks), not a payload
+ * being written, so its list `values` are not judged. A sheet read back with
+ * get_sheet carries values in the API's read shape (e.g. multiselect_list as
+ * [{ value }]), which would be wrong to send but is fine to read.
+ */
+function contextOnly(sheet?: Sheet | Record<string, unknown>): Record<string, unknown> {
+  const s = (sheet ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(s.sheet_columns)) return s;
+  return {
+    ...s,
+    sheet_columns: s.sheet_columns.map((col) => {
+      if (!col || typeof col !== "object" || Array.isArray(col)) return col;
+      const c = col as Record<string, unknown>;
+      if (!c.validators || typeof c.validators !== "object") return col;
+      const { values: _values, ...rest } = c.validators as Record<string, unknown>;
+      return { ...c, validators: rest };
+    }),
+  };
 }
 
 /** Build the user turn: the request plus whatever sheet context we were given. */

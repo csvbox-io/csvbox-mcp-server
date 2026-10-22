@@ -133,6 +133,66 @@ export function patchSheet(
   );
 }
 
+/** Query for GET /1.1/sheet. All fields optional; the API clamps per_page to 100. */
+export type ListSheetsQuery = { q?: string; page?: number; per_page?: number };
+
+/** GET /1.1/sheet — paginated list of the key owner's sheets. */
+export function listSheets(query: ListSheetsQuery = {}): Promise<ApiResult> {
+  const params: Record<string, string | number> = {};
+  if (query.q !== undefined && query.q.trim() !== "") params.q = query.q.trim();
+  if (query.page !== undefined) params.page = query.page;
+  if (query.per_page !== undefined) params.per_page = query.per_page;
+  return request((client) => client.get("/1.1/sheet", { params }));
+}
+
+/** GET /1.1/sheet/{key} — full configuration of one sheet (license key or sheet id). */
+export function getSheet(sheetLicenseKey: string): Promise<ApiResult> {
+  return request((client) =>
+    client.get(`/1.1/sheet/${encodeURIComponent(sheetLicenseKey)}`)
+  );
+}
+
+/** Query for GET /1.1/import. `from` / `to` are YYYY-MM-DD; `sheet` is a license key or sheet id. */
+export type ListImportsQuery = {
+  sheet?: string;
+  status?: "success" | "partial" | "failed" | "ongoing";
+  from?: string;
+  to?: string;
+  page?: number;
+  per_page?: number;
+};
+
+/** GET /1.1/import — paginated import history for the key owner's sheets. */
+export function listImports(query: ListImportsQuery = {}): Promise<ApiResult> {
+  const params = Object.fromEntries(
+    Object.entries(query).filter(([, v]) => v !== undefined && v !== "")
+  );
+  return request((client) => client.get("/1.1/import", { params }));
+}
+
+/** GET /1.1/import/{id} — one import's status and row counts. */
+export function getImport(importId: number): Promise<ApiResult> {
+  return request((client) => client.get(`/1.1/import/${importId}`));
+}
+
+/** GET /1.1/import/{id}/errors — the recorded failures for one import. */
+export function getImportErrors(
+  importId: number,
+  query: { page?: number; per_page?: number } = {}
+): Promise<ApiResult> {
+  const params = Object.fromEntries(
+    Object.entries(query).filter(([, v]) => v !== undefined)
+  );
+  return request((client) =>
+    client.get(`/1.1/import/${importId}/errors`, { params })
+  );
+}
+
+/** GET /1.1/account/usage — imports used / remaining in the current billing cycle. */
+export function getUsage(): Promise<ApiResult> {
+  return request((client) => client.get("/1.1/account/usage"));
+}
+
 /** Discriminated payload for the two `submit_file` submission methods. */
 export type SubmitFilePayload =
   | { kind: "url"; import: Record<string, unknown> }

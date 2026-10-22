@@ -354,3 +354,57 @@ test("missing and wrong-typed arguments are refused before any handler runs", as
 
   assert.deepEqual(stub.requests, [], "a refused call still reached the API");
 });
+
+// --- Read tools -------------------------------------------------------------
+
+const READ_TOOLS: { name: string; args: Record<string, unknown> }[] = [
+  { name: "list_sheets", args: { q: "contacts", per_page: 5 } },
+  { name: "get_sheet", args: { sheet_license_key: "lic" } },
+  { name: "list_imports", args: { status: "failed", from: "2026-10-01" } },
+  { name: "get_import", args: { import_id: 42 } },
+  { name: "get_import_errors", args: { import_id: 42 } },
+  { name: "get_usage", args: {} },
+];
+
+test("read tools report success and failure through the error flag", async (t) => {
+  const { h, stub } = await setup(t);
+
+  for (const tool of READ_TOOLS) {
+    stub.script({ kind: "response", status: 200, data: { data: [] } });
+    const ok = await withCleanEnv(CREDS, () => h.callJson(tool.name, tool.args));
+    assert.equal(ok.isError, false, `${tool.name} flagged a success as an error`);
+    assert.equal(ok.json.ok, true);
+
+    stub.script({ kind: "httpError", status: 404, data: { errors: "Sheet does not exist." } });
+    const bad = await withCleanEnv(CREDS, () => h.callJson(tool.name, tool.args));
+    assert.equal(bad.isError, true, `${tool.name} did not flag a 404`);
+    assert.equal(bad.json.status, 404);
+    assert.deepEqual(bad.json.details, { errors: "Sheet does not exist." });
+  }
+});
+
+test("read tools fail with the missing-variable message and issue no request", async (t) => {
+  const { h, stub } = await setup(t);
+
+  for (const tool of READ_TOOLS) {
+    const { json, isError } = await withCleanEnv({}, () => h.callJson(tool.name, tool.args));
+    assert.equal(isError, true);
+    assert.match(json.error, /CSVBOX_API_KEY/);
+  }
+  assert.deepEqual(stub.requests, []);
+});
+
+test("list_sheets refuses an out-of-range per_page and get_sheet an empty key", async (t) => {
+  const { h } = await setup(t);
+  await assertInvalidArgs(h, "list_sheets", { per_page: 500 }, /per_page/);
+  await assertInvalidArgs(h, "get_sheet", { sheet_license_key: "" }, /sheet_license_key/);
+});
+
+test("list_imports refuses a bad status or date; import tools refuse a non-positive id", async (t) => {
+  const { h, stub } = await setup(t);
+  await assertInvalidArgs(h, "list_imports", { status: "bogus" }, /status/);
+  await assertInvalidArgs(h, "list_imports", { from: "yesterday" }, /from/);
+  await assertInvalidArgs(h, "get_import", { import_id: 0 }, /import_id/);
+  await assertInvalidArgs(h, "get_import_errors", { import_id: 1.5 }, /import_id/);
+  assert.deepEqual(stub.requests, []);
+});

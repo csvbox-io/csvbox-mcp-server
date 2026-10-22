@@ -18,6 +18,12 @@ import {
   createSheet,
   updateSheet,
   patchSheet,
+  listSheets,
+  getSheet,
+  listImports,
+  getImport,
+  getImportErrors,
+  getUsage,
   submitFile,
 } from "../services/csvbox-api.js";
 import { VERSION } from "../version.js";
@@ -455,4 +461,67 @@ test("identification is unconditional — no environment variable disables it", 
 
   assert.equal(headerOf(stub.last(), "x-csvbox-client"), "mcp");
   assert.equal(headerOf(stub.last(), "x-csvbox-client-version"), VERSION);
+});
+
+// --- Read endpoints ---------------------------------------------------------
+
+test("listSheets sends only the provided query parameters", async (t) => {
+  const stub = stubFor(t);
+
+  await withCleanEnv(CREDS, async () => {
+    await listSheets();
+    await listSheets({ q: "  contacts ", page: 2, per_page: 5 });
+    await listSheets({ q: "   " });
+  });
+
+  const seen = stub.requests.map((r) => ({
+    method: r.method?.toUpperCase(),
+    url: r.url,
+    params: r.params,
+  }));
+  assert.deepEqual(seen, [
+    { method: "GET", url: "/1.1/sheet", params: {} },
+    { method: "GET", url: "/1.1/sheet", params: { q: "contacts", page: 2, per_page: 5 } },
+    { method: "GET", url: "/1.1/sheet", params: {} },
+  ]);
+});
+
+test("getSheet encodes the key into the path", async (t) => {
+  const stub = stubFor(t);
+
+  await withCleanEnv(CREDS, async () => {
+    await getSheet("abc/def 1");
+  });
+
+  assert.equal(stub.requests[0].method?.toUpperCase(), "GET");
+  assert.equal(stub.requests[0].url, "/1.1/sheet/abc%2Fdef%201");
+});
+
+test("import and usage reads use the documented verbs, paths and params", async (t) => {
+  const stub = stubFor(t);
+
+  await withCleanEnv(CREDS, async () => {
+    await listImports({ sheet: "lic", status: "failed", from: "2026-10-01", per_page: 10 });
+    await listImports();
+    await getImport(42);
+    await getImportErrors(42, { page: 2 });
+    await getUsage();
+  });
+
+  const seen = stub.requests.map((r) => ({
+    method: r.method?.toUpperCase(),
+    url: r.url,
+    params: r.params,
+  }));
+  assert.deepEqual(seen, [
+    {
+      method: "GET",
+      url: "/1.1/import",
+      params: { sheet: "lic", status: "failed", from: "2026-10-01", per_page: 10 },
+    },
+    { method: "GET", url: "/1.1/import", params: {} },
+    { method: "GET", url: "/1.1/import/42", params: undefined },
+    { method: "GET", url: "/1.1/import/42/errors", params: { page: 2 } },
+    { method: "GET", url: "/1.1/account/usage", params: undefined },
+  ]);
 });

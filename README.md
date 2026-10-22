@@ -8,6 +8,15 @@ Runs over **stdio**, so it works the same way in every client.
 
 | Tool | Purpose | API call |
 | --- | --- | --- |
+| `list_sheets` | List/search your sheets by title (paginated) | `GET /1.1/sheet` |
+| `get_sheet` | Read one sheet's full configuration (read before patching) | `GET /1.1/sheet/{key}` |
+| `list_imports` | Import history: filter by sheet, status, date | `GET /1.1/import` |
+| `get_import` | One import's status and row counts | `GET /1.1/import/{id}` |
+| `get_import_errors` | Why an import failed: a plain-language `likely_cause`, causes grouped by category, and the rows and columns involved | `GET /1.1/import/{id}/errors` |
+| `get_usage` | Plan, imports used and remaining this billing cycle | `GET /1.1/account/usage` |
+| `generate_webhook_handler` | Backend webhook handler for Laravel / Express / Django / Next.js | none |
+| `generate_sample_csv` | Test CSV from a sheet schema, with deliberately invalid rows | `GET /1.1/sheet/{key}` (only if a key is given) |
+| `submit_file` | Submit a file (public URL or base64) to import into a sheet; consumes one import | `POST /1.1/file` |
 | `create_sheet` | Create a CSVBox sheet | `POST /1.1/sheet` |
 | `update_sheet` | Replace an existing sheet | `PUT /1.1/sheet/{key}` |
 | `patch_sheet` | Partially update a sheet | `PATCH /1.1/sheet/{key}` |
@@ -15,16 +24,24 @@ Runs over **stdio**, so it works the same way in every client.
 | `create_importer_from_prompt` | NL prompt → validate → create | `POST /1.1/sheet` (+ LLM) |
 | `generate_import_code` | Integration code (vanilla-js/react/vue/angular) | none |
 | `generate_sheet_functions` | NL prompt → virtual columns / validation functions / data transforms (via LLM) | none (calls LLM) |
-| `validate_schema` | Local schema validation | none |
+| `validate_schema` | Local schema validation: column types, list-value shapes, function collections; `mode` is `create`, `put` or `patch` | none |
 
-> CSVBox currently has **no GET or LIST endpoints**, so there are intentionally no `get_sheet` / `list_sheet` tools.
+> The CSVBox API allows 60 requests per minute per key. A `429` comes back as a tool error with `status: 429`; wait and retry.
 
-It also exposes two **MCP prompts**:
+> Edit an existing importer by name: `list_sheets` (search by title) → `get_sheet` (read the current configuration) → `patch_sheet`. Prefer `patch_sheet` over `update_sheet`, which deletes anything not sent.
+
+It also exposes four **MCP prompts**:
 
 | Prompt | Purpose |
 | --- | --- |
 | `create_csvbox_sheet` | Make the host client's own LLM build a complete CSVBox sheet (no server-side LLM key needed). |
 | `csvbox_sheet_functions` | Make the host client's own LLM author virtual columns, validation functions, and data transforms (no server-side LLM key needed). |
+| `debug_failed_import` | Walk from an import's recorded errors to a proposed `patch_sheet` fix; changes nothing until you approve. |
+| `migrate_from_flatfile` | Convert a pasted Flatfile / OneSchema config into a CSVBox sheet, report what could not be mapped, and ask before creating it. |
+
+And three **MCP resources**: `csvbox://sheets/{key}` (a sheet's configuration with credential-like fields removed), `csvbox://docs/column-types` and `csvbox://docs/webhook-payload`.
+
+`get_usage` returns `null` for `limit` and `remaining` on unlimited plans. `generate_sample_csv` and the generators never execute `js_code`.
 
 ### Prompt → sheet generation
 
@@ -45,7 +62,8 @@ Data types and validations are inferred from the field names and any requested t
 
 | Requested / implied | Column `type` | Validators |
 | --- | --- | --- |
-| Dropdown / status / category with fixed options | `list` | `values: [...]` candidate options |
+| Dropdown / status / category with fixed options | `list` | `values: [{ "value": "x" }, ...]` candidate options (optional `display_label` per entry) |
+| Multi-select with fixed options | `multiselect_list` | `values: ["a", "b"]` (plain strings) |
 | Percentage / percent | `number` | `min_value: 0`, `max_value: 100` |
 | Positive numeric (quantity, count, stock, cost, age) | `number` | `min_value: 0` |
 | ID / code / reference number | `text` | — |
@@ -86,7 +104,7 @@ Shared optional fields: `scope` (`column` | `row`; not on virtual columns), `run
 
 Returns `{ "virtual_columns": [...], "validation_functions": [...], "source": ..., "validation": {...} }`. Collections the request does not imply are **omitted**, never returned as empty arrays.
 
-This tool **does not call the CSVBox API**. Read the generated `js_code`, then apply it yourself with `patch_sheet`. Pass `sheet` so the model references real column names and the validator can check those references — CSVBox has no read endpoint, so it must be supplied inline. Without an LLM key, use the `csvbox_sheet_functions` MCP prompt instead.
+This tool **does not call the CSVBox API**. Read the generated `js_code`, then apply it yourself with `patch_sheet`. Pass `sheet` so the model references real column names and the validator can check those references — Pass the sheet from `get_sheet` so it can be supplied inline. Without an LLM key, use the `csvbox_sheet_functions` MCP prompt instead.
 
 ### PUT vs PATCH — read this before applying
 
@@ -94,8 +112,13 @@ This tool **does not call the CSVBox API**. Read the generated `js_code`, then a
 | --- | --- | --- |
 | Collection you send | **authoritative** — any existing item not named is **deleted** | **merged** — unnamed items are left alone |
 | `"virtual_columns": []` | **deletes all 20** | no-op |
+| A column in `sheet_columns` | the sheet's columns become exactly what you send | only the fields you send change |
 | Key omitted | untouched | untouched |
 | `_delete: true` | not valid | removes that item (all its other fields ignored) |
+
+**PATCH merges columns field by field.** A column named in `sheet_columns` needs only its `column_name` plus the fields you want to change. `display_label`, `info_hint`, `default_value`, `required`, `read_only`, `matching_keywords` and `metadata.transforms` change only when sent; `validators` merge key by key (send a key as `null` to reset it to its default); everything not sent is kept, including settings the API cannot express, such as a column's auto-mapping keywords and its unique flag. Changing `type` resets `validators` to the new type's defaults, so send the validators you want with it. Columns you do not name are left alone, and a new `column_name` adds a column (send its full definition). `update_sheet` (PUT) is different: it replaces everything. This merge needs a CSVbox release that supports it; against an older server a named column is replaced whole, so send its full object.
+
+**List values have two shapes.** A `list` column needs objects with a required `value` and an optional `display_label` that is stored as an empty string when omitted (nested `dependents` the same way); a `multiselect_list` column takes plain strings. The API returns 200 and silently stores an empty list for anything else, so run `validate_schema`, which now rejects both mistakes.
 
 Use `patch_sheet` to apply generated functions. Validate first with the matching verb:
 
@@ -104,7 +127,7 @@ Use `patch_sheet` to apply generated functions. Validate first with the matching
 { "sheet": { "data_transforms": [ ... ] }, "mode": "patch" }
 ```
 
-`mode` is `create` (default), `put`, or `patch`. It only affects the function collections — under `put` an empty array is a hard error rather than a warning, and `_delete` is rejected outside `patch`.
+`mode` is `create` (default), `put`, or `patch`. For the function collections, under `put` an empty array is a hard error rather than a warning, and `_delete` is rejected outside `patch`. For columns, `patch` is the lenient mode: a column needs only its `column_name` (the server changes just the fields you send), `display_label` and `type` are checked only when present, and the list-value shape is checked only when `type` is sent. `create` and `put` still require `display_label` and `type` on every column.
 
 ### Dependencies
 
@@ -148,7 +171,7 @@ CSVBOX_API_KEY=your_api_key
 CSVBOX_API_SECRET=your_api_secret
 ```
 
-CSVBox credentials are **only** required for the API-backed tools (`create_sheet`, `update_sheet`, `patch_sheet`, `create_importer_from_prompt`). `validate_schema` and `generate_import_code` work without any credentials.
+CSVBox credentials are **only** required for the tools that call the CSVBox API: `list_sheets`, `get_sheet`, `list_imports`, `get_import`, `get_import_errors`, `get_usage`, `create_sheet`, `update_sheet`, `patch_sheet`, `submit_file`, `create_importer_from_prompt`, and `generate_sample_csv` when you give it a `sheet_license_key`. `validate_schema`, `generate_import_code`, `generate_webhook_handler` and `generate_sample_csv` with an inline `sheet` work without any credentials. The LLM-backed tools (`generate_sheet_json`, `create_importer_from_prompt`, `generate_sheet_functions`) also need an LLM key, below.
 
 > **Auth header note:** the client sends `x-csvbox-api-key` and `x-csvbox-secret-api-key` (matching the CSVBox reference payloads). These are defined as constants in `src/services/csvbox-api.ts` if your account uses different header names.
 
@@ -415,6 +438,74 @@ Returns `{ "generated_schema": { ... }, "source": ..., "validation": { ... }, "a
 // generate_import_code
 { "framework": "react" }
 ```
+
+**Find and read an importer (no license key needed):**
+
+```json
+// list_sheets
+{ "q": "contacts", "per_page": 5 }
+```
+
+Returns `{ "data": [{ "sheet_license_key": "...", "title": "Contacts", "columns_count": 8, ... }], "links": {...}, "meta": {...} }`. Pass the `sheet_license_key` (or numeric id) to `get_sheet` to read the full configuration before changing it.
+
+**Find out why an import failed:**
+
+```json
+// list_imports
+{ "status": "failed", "from": "2026-10-01", "per_page": 10 }
+```
+
+```json
+// get_import_errors
+{ "import_id": 9688 }
+```
+
+```json
+{
+  "import_id": 9688,
+  "summary": {
+    "status": "failed",
+    "total_errors": 1,
+    "likely_cause": "The destination did not accept the saved credentials or token. Reconnect or update the destination in the sheet settings. Recorded: Token \"54347db2-…\" not found",
+    "causes": [{ "category": "destination_credentials", "hint": "…", "count": 1, "example": "…" }],
+    "note": null,
+    "external_validation": null
+  },
+  "errors": [{ "row": null, "column": null, "type": null, "category": "destination_credentials", "hint": "…", "message": "Token \"54347db2-…\" not found", "source": null }],
+  "meta": { "current_page": 1, "last_page": 1, "per_page": 50, "total": 1 }
+}
+```
+
+Read `summary.likely_cause` first, then the specific `errors[].row` / `column`. Categories include `destination_credentials`, `destination_url`, `destination_timeout`, `destination_rate_limited`, `destination_server_error`, `destination_database`, `file_worksheet`, `row_validation`, `external_validation_row`, `external_validation_table`, `destination_row`, `destination_table`, `internal_error` and `unknown`. An `unknown` category means the cause is not identified: the original message is returned as-is and no cause is guessed. If `total_errors` is 0, nothing was recorded for that import.
+
+When the sheet's external validation rejects rows, the import can be `partial` with `failed_row_count: 0`: rejected rows still count as sent. `summary.external_validation` gives `rejected_rows` and `table_error`, and `summary.note` explains the count. The `debug_failed_import` prompt walks through this and proposes a `patch_sheet` fix without applying it.
+
+**Check how many imports are left:**
+
+```json
+// get_usage
+{}
+```
+
+Returns `{ "plan": "Plus", "billing_cycle": { "start": "...", "end": "..." }, "imports": { "used": 116, "limit": 10000, "remaining": 9884 }, "plans_url": "..." }`. On unlimited plans `limit` and `remaining` are `null`, not 0. `submit_file` consumes imports, so check this before a batch of test uploads.
+
+**Build a test file from a sheet (valid rows plus deliberately invalid ones):**
+
+```json
+// generate_sample_csv
+{ "sheet_license_key": "YOUR_SHEET_KEY", "valid_rows": 4, "invalid_rows": 3 }
+```
+
+Returns `{ "csv": "Name,Email,Plan\n...", "expected_failures": [{ "row": 5, "column": "name", "value": "", "reason": "required value is empty" }], "warnings": [...] }`. Rows count data rows after the header. Regex and dependent/dynamic list columns are left blank with a warning; `js_code` is never executed.
+
+**Generate the backend half of a webhook integration:**
+
+```json
+// generate_webhook_handler
+{ "framework": "express", "kind": "import_complete", "verify_signature": true }
+```
+
+Returns `{ "code": "...", "notes": [...] }`. Frameworks: `laravel`, `express`, `django`, `nextjs`. `kind` is `import_complete` (per-import summary) or `rows` (row data sent to an API-webhook destination). Signature verification applies only when signing is enabled on the destination.
 
 ## Supported column types
 

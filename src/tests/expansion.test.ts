@@ -69,7 +69,12 @@ test("valid expansion output passes validation with prefixed, typed columns", as
           column_name: "po_status",
           display_label: "Po Status",
           type: "list",
-          validators: { values: ["draft", "approved"] },
+          validators: {
+            values: [
+              { value: "draft", display_label: "Draft" },
+              { value: "approved", display_label: "Approved" },
+            ],
+          },
         },
         {
           column_name: "po_quantity",

@@ -13,7 +13,7 @@ const inputShape = {
     .record(z.string(), z.unknown())
     .optional()
     .describe(
-      "The existing sheet the functions will be applied to. Supplying it lets the model reference real column names and lets validation check those references. CSVBox exposes no read endpoint, so this must be passed inline."
+      "The existing sheet the functions will be applied to. Supplying it lets the model reference real column names and lets validation check those references. Pass the sheet returned by get_sheet."
     ),
 };
 

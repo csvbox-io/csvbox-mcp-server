@@ -11,6 +11,7 @@
 import type { Sheet } from "../schemas/csvbox-schemas.js";
 import { resolveLlm, type LlmClient } from "../services/llm-client.js";
 import { validateSheet, type ValidationResult } from "../tools/validate-schema.js";
+import { normalizeListValues } from "../schemas/normalize-list-values.js";
 import { SHEET_SYSTEM_PROMPT, repairNote } from "./sheet-system-prompt.js";
 
 export interface NoProviderResult {
@@ -108,7 +109,7 @@ export async function generateSheetSmart(
 
   let sheet: Sheet;
   try {
-    sheet = parseJsonLenient(raw) as Sheet;
+    sheet = normalizeListValues(parseJsonLenient(raw) as Sheet);
   } catch (err) {
     return {
       ok: false,
@@ -131,7 +132,7 @@ export async function generateSheetSmart(
       return { ok: false, reason: "TRUNCATED", message: TRUNCATED_MESSAGE, raw };
     }
     try {
-      sheet = parseJsonLenient(raw) as Sheet;
+      sheet = normalizeListValues(parseJsonLenient(raw) as Sheet);
       validation = validateSheet(sheet);
     } catch (err) {
       return {
