@@ -96,7 +96,8 @@ const LIST_NODE_KEYS = new Set(["value", "display_label", "dependents"]);
  * rest with a 200, so a wrong shape never errors server-side: it just leaves
  * the dropdown empty. These checks mirror that. A `list` column needs
  * `{ value, display_label? }` objects (`value` required, `display_label` optional
- * and stored empty when omitted; nested `dependents` follow the same rule, and one bad
+ * and stored empty when omitted; the dashboard saves a blank label as null, which
+ * the API reads as "not sent", so null is accepted too; nested `dependents` follow the same rule, and one bad
  * node discards the whole list), while a `multiselect_list` column
  * takes plain non-empty strings and drops objects.
  */
@@ -135,7 +136,7 @@ function validateListValues(
       const n = node as Record<string, unknown>;
       const extra = Object.keys(n).filter((k) => !LIST_NODE_KEYS.has(k));
       if (typeof n.value !== "string") problem = "needs a string value";
-      else if (n.display_label !== undefined && typeof n.display_label !== "string") {
+      else if (n.display_label != null && typeof n.display_label !== "string") {
         problem = "has a display_label that is not a string";
       } else if (extra.length > 0) problem = `has unsupported key(s): ${extra.join(", ")}`;
       else if (n.dependents !== undefined && !Array.isArray(n.dependents)) {

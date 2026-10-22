@@ -233,3 +233,45 @@ test("get_import_errors tells the model to answer from the explained cause", asy
   assert.match(tool!.description!, /never paraphrase a cause/);
   assert.match(tool!.description!, /total_errors is 0/);
 });
+
+// --- list cells use what the importer accepts ---------------------------------
+
+test("a list cell holds the display label when the entry has one, else the value", () => {
+  const out = buildSampleCsv(
+    {
+      sheet_columns: [
+        {
+          column_name: "plan",
+          display_label: "Plan",
+          type: "list",
+          validators: {
+            values: [
+              { value: "free", display_label: "Free plan" },
+              { value: "pro", display_label: "" },
+              { value: "team", display_label: null },
+              { value: "extra" },
+              { value: "pad", display_label: "   " },
+            ],
+          },
+        },
+      ],
+    },
+    5,
+    0
+  );
+  const cells = out.csv.trimEnd().split("\n").slice(1);
+  assert.deepEqual(cells, ["Free plan", "pro", "team", "extra", "pad"]);
+});
+
+test("plain-string list values (a multiselect column) are used as they are", () => {
+  const out = buildSampleCsv(
+    {
+      sheet_columns: [
+        { column_name: "tags", display_label: "Tags", type: "multiselect_list", validators: { values: ["red", "green"] } },
+      ],
+    },
+    2,
+    0
+  );
+  assert.deepEqual(out.csv.trimEnd().split("\n").slice(1), ["red", "green"]);
+});

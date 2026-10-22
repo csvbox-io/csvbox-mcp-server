@@ -47,7 +47,7 @@ export const DEPENDENT_COLUMN_TYPES = [
  */
 export type ListValue = {
   value: string;
-  display_label?: string;
+  display_label?: string | null;
   dependents?: ListValue[];
 };
 
@@ -55,7 +55,7 @@ export const ListValueSchema: z.ZodType<ListValue> = z.lazy(() =>
   z
     .object({
       value: z.string(),
-      display_label: z.string().optional(),
+      display_label: z.string().nullish(),
       dependents: z.array(ListValueSchema).optional(),
     })
     .passthrough()

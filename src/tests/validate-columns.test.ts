@@ -482,3 +482,16 @@ test("a dependent list's parent outside the request is a warning under patch, an
   );
   assert.match(create.errors.join("|"), /non-existent column/);
 });
+
+test("a null display_label on a list entry is accepted: the dashboard saves a blank label that way", () => {
+  const sheet = listSheet("list", [
+    { value: "free", display_label: "Free plan" },
+    { value: "team", display_label: "", dependents: [{ value: "seat-5", display_label: null }] },
+    { value: "extra", display_label: null },
+  ]);
+  const result = validateSheet(sheet);
+  assert.equal(result.valid, true, result.errors.join(" | "));
+
+  const wrong = validateSheet(listSheet("list", [{ value: "a", display_label: 5 }]));
+  assert.equal(wrong.valid, false, "a non-string, non-null label is still wrong");
+});

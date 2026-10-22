@@ -42,11 +42,21 @@ const UNSUPPORTED = new Set([
   "multiselect_dynamic_list",
 ]);
 
+/**
+ * What a cell must contain to be a valid choice. The importer accepts a list
+ * entry's display_label when it has one and its value otherwise (both, when the
+ * sheet sets accept_list_values), so the label is what a file should carry; a
+ * file holding the raw value of a labelled entry is flagged invalid.
+ */
 function listValues(col: Column): string[] {
   const values = col.validators?.values;
   if (!Array.isArray(values)) return [];
   return values
-    .map((v: any) => (typeof v === "string" ? v : v?.value))
+    .map((v: any) => {
+      if (typeof v === "string") return v;
+      const label = typeof v?.display_label === "string" ? v.display_label.trim() : "";
+      return label !== "" ? v.display_label : v?.value;
+    })
     .filter((v: unknown): v is string => typeof v === "string" && v !== "");
 }
 
@@ -204,7 +214,7 @@ export function registerGenerateSampleCsv(server: McpServer): void {
     {
       title: "Generate Sample CSV",
       description:
-        "Build a test CSV from a CSVBox sheet schema so validations can be exercised right away. Input: { sheet_license_key | sheet, valid_rows?, invalid_rows? }. Pass sheet_license_key to read the schema with get_sheet, or pass the sheet JSON inline. Returns { csv, expected_failures: [{ row, column, value, reason }], warnings }; row numbers count data rows after the header, and each invalid row breaks exactly one cell. Values come only from declared types and validators; js_code (virtual columns, validation functions, data transforms) is never executed, and regex and dependent/dynamic list columns are left blank with a warning. Save the csv to a file and upload it with submit_file (check get_usage first: uploads consume imports).",
+        "Build a test CSV from a CSVBox sheet schema so validations can be exercised right away. Input: { sheet_license_key | sheet, valid_rows?, invalid_rows? }. Pass sheet_license_key to read the schema with get_sheet, or pass the sheet JSON inline. Returns { csv, expected_failures: [{ row, column, value, reason }], warnings }; row numbers count data rows after the header, and each invalid row breaks exactly one cell. Values come only from declared types and validators; a list cell holds the entry's display label when it has one and its value otherwise, which is what the importer accepts. js_code (virtual columns, validation functions, data transforms) is never executed, and regex and dependent/dynamic list columns are left blank with a warning. Save the csv to a file and upload it with submit_file (check get_usage first: uploads consume imports).",
       inputSchema: {
         sheet_license_key: z
           .string()

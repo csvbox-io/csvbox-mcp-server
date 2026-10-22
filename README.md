@@ -118,7 +118,7 @@ This tool **does not call the CSVBox API**. Read the generated `js_code`, then a
 
 **PATCH merges columns field by field.** A column named in `sheet_columns` needs only its `column_name` plus the fields you want to change. `display_label`, `info_hint`, `default_value`, `required`, `read_only`, `matching_keywords` and `metadata.transforms` change only when sent; `validators` merge key by key (send a key as `null` to reset it to its default); everything not sent is kept, including settings the API cannot express, such as a column's auto-mapping keywords and its unique flag. Changing `type` resets `validators` to the new type's defaults, so send the validators you want with it. Columns you do not name are left alone, and a new `column_name` adds a column (send its full definition). `update_sheet` (PUT) is different: it replaces everything. This merge needs a CSVbox release that supports it; against an older server a named column is replaced whole, so send its full object.
 
-**List values have two shapes.** A `list` column needs objects with a required `value` and an optional `display_label` that is stored as an empty string when omitted (nested `dependents` the same way); a `multiselect_list` column takes plain strings. The API returns 200 and silently stores an empty list for anything else, so run `validate_schema`, which now rejects both mistakes.
+**List values have two shapes.** A `list` column needs objects with a required `value` and an optional `display_label` that is stored as an empty string when omitted (nested `dependents` the same way); a `multiselect_list` column takes plain strings (a multiselect column with no values is stored with an empty list, which the importer needs to render). The API returns 200 and silently stores an empty list for anything else, so run `validate_schema`, which now rejects both mistakes.
 
 Use `patch_sheet` to apply generated functions. Validate first with the matching verb:
 
@@ -496,7 +496,7 @@ Returns `{ "plan": "Plus", "billing_cycle": { "start": "...", "end": "..." }, "i
 { "sheet_license_key": "YOUR_SHEET_KEY", "valid_rows": 4, "invalid_rows": 3 }
 ```
 
-Returns `{ "csv": "Name,Email,Plan\n...", "expected_failures": [{ "row": 5, "column": "name", "value": "", "reason": "required value is empty" }], "warnings": [...] }`. Rows count data rows after the header. Regex and dependent/dynamic list columns are left blank with a warning; `js_code` is never executed.
+Returns `{ "csv": "Name,Email,Plan\n...", "expected_failures": [{ "row": 5, "column": "name", "value": "", "reason": "required value is empty" }], "warnings": [...] }`. Rows count data rows after the header. List cells hold each entry's display label when it has one (otherwise its value), because that is what the importer accepts; a file carrying the raw value of a labelled entry is flagged invalid. Regex and dependent/dynamic list columns are left blank with a warning; `js_code` is never executed.
 
 **Generate the backend half of a webhook integration:**
 
