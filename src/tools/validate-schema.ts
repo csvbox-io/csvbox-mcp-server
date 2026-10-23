@@ -87,6 +87,11 @@ interface Ctx {
   knownNames: Set<string> | null;
   /** Set once so the "cannot check references" warning is not repeated. */
   warnedMissingColumns: boolean;
+  /**
+   * True when `sheet_columns` is the sheet's full column list (the functions generator passes the
+   * sheet as context), so a reference to a column outside it is a real mistake even under patch.
+   */
+  columnsAreComplete: boolean;
 }
 
 const LIST_NODE_KEYS = new Set(["value", "display_label", "dependents"]);
@@ -506,9 +511,16 @@ function validateCollection(
               if (typeof name !== "string") {
                 ctx.errors.push(`${named}: columns entries must be strings.`);
               } else if (!ctx.knownNames!.has(name)) {
-                ctx.errors.push(
-                  `${named}: columns references "${name}", which is not a column in sheet_columns.`
-                );
+                // A patch names only the columns it changes; the others exist on the sheet already.
+                if (ctx.mode === "patch" && !ctx.columnsAreComplete) {
+                  ctx.warnings.push(
+                    `${named}: columns references "${name}", which is not in this request; make sure that column already exists on the sheet.`
+                  );
+                } else {
+                  ctx.errors.push(
+                    `${named}: columns references "${name}", which is not a column in sheet_columns.`
+                  );
+                }
               }
             });
           }
@@ -571,11 +583,14 @@ function validateCollection(
  * `mode` describes the write verb the payload is headed for. It only affects
  * the function collections (empty arrays and `_delete`) and how strictly columns
  * are checked: under patch a column need only name itself, because the server
- * keeps every field a PATCH does not send.
+ * keeps every field a PATCH does not send, and a function that references a column outside the request
+ * is only warned about (that column must already exist on the sheet). Pass `columnsAreComplete` when
+ * `sheet_columns` is known to be the whole column list, to keep such a reference an error.
  */
 export function validateSheet(
   sheet: unknown,
-  mode: ValidationMode = "create"
+  mode: ValidationMode = "create",
+  options: { columnsAreComplete?: boolean } = {}
 ): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -601,7 +616,7 @@ export function validateSheet(
   // sheet_columns is optional. Absent -> skip column checks. Empty -> warn.
   const knownNames = validateColumns(s, errors, warnings, mode);
 
-  const ctx: Ctx = { errors, warnings, mode, knownNames, warnedMissingColumns: false };
+  const ctx: Ctx = { errors, warnings, mode, knownNames, warnedMissingColumns: false, columnsAreComplete: options.columnsAreComplete === true };
   COLLECTIONS.forEach((spec) => validateCollection(s, spec, ctx));
 
   return { valid: errors.length === 0, errors, warnings };
@@ -615,7 +630,7 @@ const inputShape = {
     .enum(["create", "put", "patch"])
     .optional()
     .describe(
-      'Which write verb this payload is headed for. "create" (default) for POST, "put" for a full replace, "patch" for a partial update. It changes two things. Function collections: an empty array is an error under "put" (it deletes every item); `_delete` is fully valid under "patch", redundant (warning only) under "put", and an error under "create". Columns: under "patch" a column needs only `column_name`, because the server changes just the fields you send; `display_label` and `type` are checked only when present.'
+      'Which write verb this payload is headed for. "create" (default) for POST, "put" for a full replace, "patch" for a partial update. It changes two things. Function collections: an empty array is an error under "put" (it deletes every item); `_delete` is fully valid under "patch", redundant (warning only) under "put", and an error under "create". Columns: under "patch" a column needs only `column_name`, because the server changes just the fields you send; `display_label` and `type` are checked only when present. Under "patch", a function or transform that references a column not in this request is a warning (it must already exist on the sheet), not an error.'
     ),
 };
 

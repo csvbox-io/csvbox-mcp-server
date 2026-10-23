@@ -133,15 +133,19 @@ export function patchSheet(
   );
 }
 
+/** Query parameters without the unset ones (and, by default, without empty strings), ready for axios. */
+function compactParams(query: Record<string, unknown>, dropEmptyStrings = true): Record<string, string | number> {
+  return Object.fromEntries(
+    Object.entries(query).filter(([, v]) => v !== undefined && (!dropEmptyStrings || v !== ""))
+  ) as Record<string, string | number>;
+}
+
 /** Query for GET /1.1/sheet. All fields optional; the API clamps per_page to 100. */
 export type ListSheetsQuery = { q?: string; page?: number; per_page?: number };
 
 /** GET /1.1/sheet — paginated list of the key owner's sheets. */
 export function listSheets(query: ListSheetsQuery = {}): Promise<ApiResult> {
-  const params: Record<string, string | number> = {};
-  if (query.q !== undefined && query.q.trim() !== "") params.q = query.q.trim();
-  if (query.page !== undefined) params.page = query.page;
-  if (query.per_page !== undefined) params.per_page = query.per_page;
+  const params = compactParams({ q: query.q?.trim(), page: query.page, per_page: query.per_page });
   return request((client) => client.get("/1.1/sheet", { params }));
 }
 
@@ -164,9 +168,7 @@ export type ListImportsQuery = {
 
 /** GET /1.1/import — paginated import history for the key owner's sheets. */
 export function listImports(query: ListImportsQuery = {}): Promise<ApiResult> {
-  const params = Object.fromEntries(
-    Object.entries(query).filter(([, v]) => v !== undefined && v !== "")
-  );
+  const params = compactParams(query);
   return request((client) => client.get("/1.1/import", { params }));
 }
 
@@ -180,9 +182,7 @@ export function getImportErrors(
   importId: number,
   query: { page?: number; per_page?: number } = {}
 ): Promise<ApiResult> {
-  const params = Object.fromEntries(
-    Object.entries(query).filter(([, v]) => v !== undefined)
-  );
+  const params = compactParams(query, false);
   return request((client) =>
     client.get(`/1.1/import/${importId}/errors`, { params })
   );

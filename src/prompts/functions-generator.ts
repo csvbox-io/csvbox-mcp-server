@@ -92,7 +92,8 @@ function validateFunctions(
   functions: FunctionsPayload,
   sheet?: Sheet | Record<string, unknown>
 ): ValidationResult {
-  return validateSheet({ ...contextOnly(sheet), ...functions }, "patch");
+  // The sheet is passed whole as context, so a reference outside it is a real mistake to repair.
+  return validateSheet({ ...contextOnly(sheet), ...functions }, "patch", { columnsAreComplete: true });
 }
 
 /**

@@ -36,7 +36,7 @@ ${
 Steps:
 1. Call \`get_import\` for the import and report its status and how many rows were imported versus failed.
 2. Call \`get_import_errors\` and read every page you need. Start from \`summary.likely_cause\` and \`summary.causes\`, and report \`summary.note\` when it is set (it explains cases such as a partial import with zero failed rows). If \`total_errors\` is 0, say plainly that no cause was recorded instead of guessing.
-3. Give the cause in plain words, then list the specific rows and columns from \`errors\`. Use each error's \`category\` and \`hint\` as stated; a category of "unknown" means the cause is not identified, so quote the message and say so. Do not invent causes the errors do not support.
+3. Give the cause in plain words, then list the specific rows and columns from \`errors\`. Name a row only when the error has a \`row\`; a \`chunk\` is a part of the file, so call it a chunk. Use each error's \`category\` and \`hint\` as stated; a category of "unknown" means the cause is not identified, so quote the message and say so. Do not invent causes the errors do not support.
 4. Call \`get_sheet\` for the import's sheet and compare the configuration with the errors.
 5. If the fix is a change to the sheet (a validator that is too strict, a missing column, a wrong type), show the exact \`patch_sheet\` \`changes\` object and run \`validate_schema\` with mode "patch" on it. If the cause is in the user's file or destination, say what to change there instead.
 6. Do NOT call \`patch_sheet\` or \`update_sheet\` until I approve the change.`,

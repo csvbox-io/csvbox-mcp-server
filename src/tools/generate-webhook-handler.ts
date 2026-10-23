@@ -42,7 +42,10 @@ function verifySignature(req) {
   const timestamp = req.get("x-csvbox-timestamp");
   const signature = req.get("x-csvbox-signature");
   if (!SECRET || !timestamp || !signature) return false;
-  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  // rawBody is set only when express.json parsed a body; without one there is nothing to verify.
+  if (!Buffer.isBuffer(req.rawBody)) return false;
+  const seconds = Number(timestamp);
+  if (!Number.isFinite(seconds) || Math.abs(Date.now() / 1000 - seconds) > 300) return false;
   const expected = crypto
     .createHmac("sha256", SECRET)
     .update(\`\${timestamp}.\`)
@@ -98,7 +101,8 @@ function verifySignature(req: Request, raw: string): boolean {
   const timestamp = req.headers.get("x-csvbox-timestamp");
   const signature = req.headers.get("x-csvbox-signature");
   if (!secret || !timestamp || !signature) return false;
-  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  const seconds = Number(timestamp);
+  if (!Number.isFinite(seconds) || Math.abs(Date.now() / 1000 - seconds) > 300) return false;
   const expected = crypto.createHmac("sha256", secret).update(\`\${timestamp}.\${raw}\`).digest("hex");
   const a = Buffer.from(expected);
   const b = Buffer.from(signature);
@@ -125,7 +129,12 @@ import { NextResponse } from "next/server";${verifySignature ? '\nimport crypto 
 ${verify}
 export async function POST(req: Request) {
   const raw = await req.text(); // raw body, needed for signature checks
-${check}  const payload = JSON.parse(raw);
+${check}  let payload: any;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return NextResponse.json({ error: "invalid json" }, { status: 400 });
+  }
 ${body}
   return NextResponse.json({ ok: true });
 }
@@ -144,9 +153,10 @@ def verify_signature(request) -> bool:
     if not SECRET or not timestamp or not signature:
         return False
     try:
-        if abs(time.time() - float(timestamp)) > 300:
-            return False
+        seconds = float(timestamp)
     except ValueError:
+        return False
+    if not math.isfinite(seconds) or abs(time.time() - seconds) > 300:
         return False
     expected = hmac.new(
         SECRET.encode(), timestamp.encode() + b"." + request.body, hashlib.sha256
@@ -173,7 +183,7 @@ def verify_signature(request) -> bool:
     # TODO: enqueue rows for processing; make this idempotent (chunks may be retried)`;
   return `# views.py  (Django)
 import json
-import logging${verifySignature ? "\nimport hashlib\nimport hmac\nimport os\nimport time" : ""}
+import logging${verifySignature ? "\nimport hashlib\nimport hmac\nimport math\nimport os\nimport time" : ""}
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -205,7 +215,7 @@ function laravel({ kind, verifySignature }: HandlerOptions): string {
         $signature = $request->header('x-csvbox-signature');
         $secret = config('services.csvbox.webhook_secret'); // env('CSVBOX_WEBHOOK_SECRET')
 
-        if (!$secret || !$timestamp || !$signature || abs(time() - (int) $timestamp) > 300) {
+        if (!$secret || !$timestamp || !$signature || !ctype_digit((string) $timestamp) || abs(time() - (int) $timestamp) > 300) {
             return response()->json(['error' => 'invalid signature'], 401);
         }
 

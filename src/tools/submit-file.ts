@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { submitFile } from "../services/csvbox-api.js";
+import { json, respond } from "./respond.js";
 
 const optionsShape = z
   .object({
@@ -49,17 +50,7 @@ const inputShape = {
     .describe("Dynamic column definitions with validators."),
 };
 
-function errorResult(message: string) {
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify({ ok: false, error: message }, null, 2),
-      },
-    ],
-    isError: true,
-  };
-}
+const errorResult = (message: string) => json({ ok: false, error: message }, true);
 
 export function registerSubmitFile(server: McpServer): void {
   server.registerTool(
@@ -105,26 +96,19 @@ export function registerSubmitFile(server: McpServer): void {
         ...(dynamic_columns !== undefined && { dynamic_columns }),
       };
 
-      try {
-        const result = hasUrl
-          ? await submitFile({
+      return respond(() =>
+        hasUrl
+          ? submitFile({
               kind: "url",
               import: { ...importFields, public_file_url },
             })
-          : await submitFile({
+          : submitFile({
               kind: "upload",
               import: importFields,
               fileName: file_name!,
               fileContent: Buffer.from(file_base64!, "base64"),
-            });
-
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-          isError: !result.ok,
-        };
-      } catch (err) {
-        return errorResult(err instanceof Error ? err.message : String(err));
-      }
+            })
+      );
     }
   );
 }

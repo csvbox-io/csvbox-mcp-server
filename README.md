@@ -9,7 +9,7 @@ Runs over **stdio**, so it works the same way in every client.
 | Tool | Purpose | API call |
 | --- | --- | --- |
 | `list_sheets` | List/search your sheets by title (paginated) | `GET /1.1/sheet` |
-| `get_sheet` | Read one sheet's full configuration (read before patching) | `GET /1.1/sheet/{key}` |
+| `get_sheet` | Read one sheet's full configuration (read before patching); credential-like values are shown as `[redacted]` | `GET /1.1/sheet/{key}` |
 | `list_imports` | Import history: filter by sheet, status, date | `GET /1.1/import` |
 | `get_import` | One import's status and row counts | `GET /1.1/import/{id}` |
 | `get_import_errors` | Why an import failed: a plain-language `likely_cause`, causes grouped by category, and the rows and columns involved | `GET /1.1/import/{id}/errors` |
@@ -39,7 +39,9 @@ It also exposes four **MCP prompts**:
 | `debug_failed_import` | Walk from an import's recorded errors to a proposed `patch_sheet` fix; changes nothing until you approve. |
 | `migrate_from_flatfile` | Convert a pasted Flatfile / OneSchema config into a CSVBox sheet, report what could not be mapped, and ask before creating it. |
 
-And three **MCP resources**: `csvbox://sheets/{key}` (a sheet's configuration with credential-like fields removed), `csvbox://docs/column-types` and `csvbox://docs/webhook-payload`.
+And three **MCP resources**: `csvbox://sheets/{key}` (a sheet's configuration; credential-like values are masked, see below), `csvbox://docs/column-types` and `csvbox://docs/webhook-payload`.
+
+**Credentials in sheet configurations.** The sheet API returns no destination credentials; the secret-bearing field is a webhook's custom headers (`webhooks[].import_complete.custom_headers`). `get_sheet` and the `csvbox://sheets/{key}` resource show the value of a credential-like header (`Authorization`, `x-api-key`, anything with `token`, `secret`, `key`, `signature`, `cookie`) as `[redacted]`, and the same for any string under a credential-named key; keys are never removed and flags such as `signing_enabled` are untouched. Send a body back with `patch_sheet` or `update_sheet` as you read it and the stored values are put back by header name, using one extra read, so a round trip never overwrites a secret. A `[redacted]` that cannot be matched to a stored header is refused before anything is sent.
 
 `get_usage` returns `null` for `limit` and `remaining` on unlimited plans. `generate_sample_csv` and the generators never execute `js_code`.
 
@@ -118,6 +120,8 @@ This tool **does not call the CSVBox API**. Read the generated `js_code`, then a
 
 **PATCH merges columns field by field.** A column named in `sheet_columns` needs only its `column_name` plus the fields you want to change. `display_label`, `info_hint`, `default_value`, `required`, `read_only`, `matching_keywords` and `metadata.transforms` change only when sent; `validators` merge key by key (send a key as `null` to reset it to its default); everything not sent is kept, including settings the API cannot express, such as a column's auto-mapping keywords and its unique flag. Changing `type` resets `validators` to the new type's defaults, so send the validators you want with it. Columns you do not name are left alone, and a new `column_name` adds a column (send its full definition). `update_sheet` (PUT) is different: it replaces everything. This merge needs a CSVbox release that supports it; against an older server a named column is replaced whole, so send its full object.
 
+**Hidden values come back safely.** `get_sheet` shows a credential-like webhook header value as `[redacted]`, for example `{ "key": "Authorization", "value": "[redacted]" }`. When you send the sheet back with `patch_sheet` or `update_sheet`, leave `[redacted]` as it is: the server looks the header up by name, puts the stored value back, and saves the sheet with its secret intact. To change a secret, send the new value. If a `[redacted]` has no matching stored header, the call stops before anything is saved and the error names the field. Never type `[redacted]` into a new sheet: `create_sheet` refuses it.
+
 **List values have two shapes.** A `list` column needs objects with a required `value` and an optional `display_label` that is stored as an empty string when omitted (nested `dependents` the same way); a `multiselect_list` column takes plain strings (a multiselect column with no values is stored with an empty list, which the importer needs to render). The API returns 200 and silently stores an empty list for anything else, so run `validate_schema`, which now rejects both mistakes.
 
 Use `patch_sheet` to apply generated functions. Validate first with the matching verb:
@@ -127,7 +131,7 @@ Use `patch_sheet` to apply generated functions. Validate first with the matching
 { "sheet": { "data_transforms": [ ... ] }, "mode": "patch" }
 ```
 
-`mode` is `create` (default), `put`, or `patch`. For the function collections, under `put` an empty array is a hard error rather than a warning, and `_delete` is rejected outside `patch`. For columns, `patch` is the lenient mode: a column needs only its `column_name` (the server changes just the fields you send), `display_label` and `type` are checked only when present, and the list-value shape is checked only when `type` is sent. `create` and `put` still require `display_label` and `type` on every column.
+`mode` is `create` (default), `put`, or `patch`. For the function collections, under `put` an empty array is a hard error rather than a warning, and `_delete` is rejected outside `patch`. For columns, `patch` is the lenient mode: a column needs only its `column_name` (the server changes just the fields you send), `display_label` and `type` are checked only when present, and the list-value shape is checked only when `type` is sent. `create` and `put` still require `display_label` and `type` on every column. Under `patch`, a function or transform that references a column not in the request is a warning (that column must already exist on the sheet), not an error; under `create` and `put` it is still an error.
 
 ### Dependencies
 
@@ -471,12 +475,12 @@ Returns `{ "data": [{ "sheet_license_key": "...", "title": "Contacts", "columns_
     "note": null,
     "external_validation": null
   },
-  "errors": [{ "row": null, "column": null, "type": null, "category": "destination_credentials", "hint": "…", "message": "Token \"54347db2-…\" not found", "source": null }],
+  "errors": [{ "row": null, "chunk": null, "column": null, "type": null, "category": "destination_credentials", "hint": "…", "message": "Token \"54347db2-…\" not found", "source": null }],
   "meta": { "current_page": 1, "last_page": 1, "per_page": 50, "total": 1 }
 }
 ```
 
-Read `summary.likely_cause` first, then the specific `errors[].row` / `column`. Categories include `destination_credentials`, `destination_url`, `destination_timeout`, `destination_rate_limited`, `destination_server_error`, `destination_database`, `file_worksheet`, `row_validation`, `external_validation_row`, `external_validation_table`, `destination_row`, `destination_table`, `internal_error` and `unknown`. An `unknown` category means the cause is not identified: the original message is returned as-is and no cause is guessed. If `total_errors` is 0, nothing was recorded for that import.
+Read `summary.likely_cause` first, then the specific `errors[].row` / `column`. `row` is set only when the error names a real row; `chunk` is the batch of rows the destination was sent when it failed, never a row number. `list_imports` takes `from` / `to` as real `YYYY-MM-DD` dates (`from` not after `to`); anything else is a 422. Categories include `destination_credentials`, `destination_url`, `destination_timeout`, `destination_rate_limited`, `destination_server_error`, `destination_database`, `file_worksheet`, `row_validation`, `external_validation_row`, `external_validation_table`, `destination_row`, `destination_table`, `internal_error` and `unknown`. An `unknown` category means the cause is not identified: the original message is returned as-is and no cause is guessed. If `total_errors` is 0, nothing was recorded for that import.
 
 When the sheet's external validation rejects rows, the import can be `partial` with `failed_row_count: 0`: rejected rows still count as sent. `summary.external_validation` gives `rejected_rows` and `table_error`, and `summary.note` explains the count. The `debug_failed_import` prompt walks through this and proposes a `patch_sheet` fix without applying it.
 
@@ -496,7 +500,7 @@ Returns `{ "plan": "Plus", "billing_cycle": { "start": "...", "end": "..." }, "i
 { "sheet_license_key": "YOUR_SHEET_KEY", "valid_rows": 4, "invalid_rows": 3 }
 ```
 
-Returns `{ "csv": "Name,Email,Plan\n...", "expected_failures": [{ "row": 5, "column": "name", "value": "", "reason": "required value is empty" }], "warnings": [...] }`. Rows count data rows after the header. List cells hold each entry's display label when it has one (otherwise its value), because that is what the importer accepts; a file carrying the raw value of a labelled entry is flagged invalid. Regex and dependent/dynamic list columns are left blank with a warning; `js_code` is never executed.
+Returns `{ "csv": "Name,Email,Plan\n...", "expected_failures": [{ "row": 5, "column": "name", "value": "", "reason": "required value is empty" }, { "row": 1, "column": "gstin", "value": "", "reason": "required value cannot be derived and is left empty" }], "warnings": [...] }`. Rows count data rows after the header. List cells hold each entry's display label when it has one (otherwise its value), because that is what the importer accepts; a file carrying the raw value of a labelled entry is flagged invalid. Regex and dependent/dynamic list columns are left blank with a warning; `js_code` is never executed. A **required** column the tool cannot fill is blank in every row, and each such cell is listed in `expected_failures` (reason `required value cannot be derived and is left empty`), so every row not listed is one the importer accepts. Date cells follow the column's own format, including `custom` and `multiple` (the first pattern); the tokens are `YYYY YY MMMM MMM MM M DD D`, and a format with any other token gives a blank cell and a warning. Text under `max_length` stays distinct across rows (a warning appears when it cannot), and card numbers cycle through valid test numbers.
 
 **Generate the backend half of a webhook integration:**
 
@@ -505,7 +509,7 @@ Returns `{ "csv": "Name,Email,Plan\n...", "expected_failures": [{ "row": 5, "col
 { "framework": "express", "kind": "import_complete", "verify_signature": true }
 ```
 
-Returns `{ "code": "...", "notes": [...] }`. Frameworks: `laravel`, `express`, `django`, `nextjs`. `kind` is `import_complete` (per-import summary) or `rows` (row data sent to an API-webhook destination). Signature verification applies only when signing is enabled on the destination.
+Returns `{ "code": "...", "notes": [...] }`. Frameworks: `laravel`, `express`, `django`, `nextjs`. `kind` is `import_complete` (per-import summary) or `rows` (row data sent to an API-webhook destination). Signature verification applies only when signing is enabled on the destination. With `verify_signature`, every generated handler rejects a missing body, a timestamp that is not a finite number of seconds (or is more than 300 seconds off) and a wrong signature with 401, and the Next.js handler answers 400 to a body that is not JSON.
 
 ## Supported column types
 

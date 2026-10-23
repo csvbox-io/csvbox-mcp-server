@@ -12,12 +12,21 @@ import { COLUMN_TYPES } from "../schemas/csvbox-schemas.js";
 
 const COLUMN_TYPE_LIST = COLUMN_TYPES.join(", ");
 
-export const SHEET_SYSTEM_PROMPT = `You are a CSVBox Sheet Generator.
+/** Role and task lines, without any statement about the shape of the reply. */
+export const SHEET_PROMPT_INTRO = `You are a CSVBox Sheet Generator.
 
-Convert the user's request into a single valid CSVBox sheet configuration.
-Return ONLY valid JSON — no prose, no markdown, no code fences.
+Convert the user's request into a single valid CSVBox sheet configuration.`;
 
-## Top-level sections (include only the ones the request implies)
+/** The reply contract for callers that want bare JSON back (the generator and the sheet prompt). */
+const JSON_ONLY_LEAD = "Return ONLY valid JSON — no prose, no markdown, no code fences.";
+const JSON_ONLY_TAIL = "Return only JSON.";
+
+/**
+ * Everything that describes the sheet format itself: sections, column types, validators, examples.
+ * It says nothing about how the reply is shaped, so a prompt with a different reply contract
+ * (migrate_from_flatfile) can reuse it without contradicting itself.
+ */
+export const SHEET_SCHEMA_RULES = `## Top-level sections (include only the ones the request implies)
 - "title": string, concise, MAXIMUM 190 characters.
 - "sheet_columns": array of the ACTUAL DATA FIELDS to import.
 - "destinations": array of where imported data is sent.
@@ -168,9 +177,14 @@ Expected JSON (EXPANSION mode — each module expanded into prefixed, typed, val
 
 Notice: each module became several prefixed columns; GSTIN uses regex, the percentage is a
 number 0-100, quantity is a positive number, the dropdown is a list with values, and every
-column_name is unique.
+column_name is unique.`;
 
-Return only JSON.`;
+export const SHEET_SYSTEM_PROMPT = `${SHEET_PROMPT_INTRO}
+${JSON_ONLY_LEAD}
+
+${SHEET_SCHEMA_RULES}
+
+${JSON_ONLY_TAIL}`;
 
 /**
  * Build the repair note appended to the user prompt when the first generation

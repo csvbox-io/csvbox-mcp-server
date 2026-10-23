@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createSheet } from "../services/csvbox-api.js";
+import { respond } from "./respond.js";
+import { refusePlaceholder } from "./guarded-write.js";
 
 const inputShape = {
   sheet: z
@@ -18,27 +20,7 @@ export function registerCreateSheet(server: McpServer): void {
       inputSchema: inputShape,
     },
     async ({ sheet }) => {
-      try {
-        const result = await createSheet(sheet);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-          isError: !result.ok,
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { ok: false, error: err instanceof Error ? err.message : String(err) },
-                null,
-                2
-              ),
-            },
-          ],
-          isError: true,
-        };
-      }
+      return respond(async () => refusePlaceholder(sheet) ?? createSheet(sheet));
     }
   );
 }

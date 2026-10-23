@@ -10,7 +10,7 @@ import { connectHarness } from "./support/mcp-harness.js";
 import { createHttpStub } from "./support/http-stub.js";
 import { withCleanEnv } from "./support/env.js";
 import { buildSampleCsv } from "../tools/generate-sample-csv.js";
-import { redactSecrets } from "../resources/csvbox-resources.js";
+import { maskSecrets } from "../redact.js";
 import {
   buildWebhookHandler,
   WEBHOOK_FRAMEWORKS,
@@ -183,16 +183,20 @@ test("migrate_from_flatfile embeds the pasted config and asks before creating", 
 
 // --- resources ---------------------------------------------------------------
 
-test("redactSecrets removes credential-shaped keys at any depth", () => {
-  const out = redactSecrets({
+test("maskSecrets masks credential-shaped string values at any depth and keeps every key", () => {
+  const out = maskSecrets({
     title: "T",
     destinations: [{ type: "x", api_key: "k", nested: { password: "p", keep: 1 } }],
     signing_secret: "s",
   });
-  assert.deepEqual(out, { title: "T", destinations: [{ type: "x", nested: { keep: 1 } }] });
+  assert.deepEqual(out, {
+    title: "T",
+    destinations: [{ type: "x", api_key: "[redacted]", nested: { password: "[redacted]", keep: 1 } }],
+    signing_secret: "[redacted]",
+  });
 });
 
-test("csvbox://sheets/{key} returns the redacted sheet and errors for an unknown key", async (t) => {
+test("csvbox://sheets/{key} returns the masked sheet and errors for an unknown key", async (t) => {
   const stub = createHttpStub();
   stub.install();
   const h = await connectHarness();
@@ -204,7 +208,7 @@ test("csvbox://sheets/{key} returns the redacted sheet and errors for an unknown
   stub.script({ kind: "response", status: 200, data: { title: "T", webhooks: [{ signing_secret: "s", url: "u" }] } });
   const ok = await withCleanEnv(CREDS, () => h.client.readResource({ uri: "csvbox://sheets/lic" }));
   const body = JSON.parse((ok.contents[0] as { text: string }).text);
-  assert.deepEqual(body, { title: "T", webhooks: [{ url: "u" }] });
+  assert.deepEqual(body, { title: "T", webhooks: [{ signing_secret: "[redacted]", url: "u" }] });
 
   stub.script({ kind: "httpError", status: 404, data: { errors: "Sheet does not exist." } });
   await assert.rejects(
@@ -274,4 +278,17 @@ test("plain-string list values (a multiselect column) are used as they are", () 
     0
   );
   assert.deepEqual(out.csv.trimEnd().split("\n").slice(1), ["red", "green"]);
+});
+
+test("get_import_errors and debug_failed_import tell the model a chunk is not a row", async (t) => {
+  const h = await connectHarness();
+  t.after(() => h.close());
+
+  const tool = (await h.client.listTools()).tools.find((x) => x.name === "get_import_errors");
+  assert.match(tool!.description!, /chunk/);
+  assert.match(tool!.description!, /never a row/);
+
+  const prompt = await h.client.getPrompt({ name: "debug_failed_import", arguments: {} });
+  const text = (prompt.messages[0].content as { text: string }).text;
+  assert.match(text, /a \`chunk\` is a part of the file/);
 });
